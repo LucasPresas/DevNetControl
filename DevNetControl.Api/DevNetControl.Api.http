@@ -1,0 +1,5 @@
+@HostAddress = http://localhost:5066
+
+### Prueba de Base de Datos
+GET {{HostAddress}}/api/auth/test-db
+Accept: application/json

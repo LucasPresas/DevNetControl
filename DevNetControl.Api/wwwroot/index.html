@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>DevNet Control - Status</title>
+</head>
+<body>
+    <h1>Estado del Servidor</h1>
+    <button onclick="checkDb()">Probar DB</button>
+    <pre id="result"></pre>
+
+    <script>
+        async function checkDb() {
+            const res = await fetch('/api/auth/test-db');
+            const data = await res.json();
+            document.getElementById('result').innerText = JSON.stringify(data, null, 2);
+        }
+    </script>
+</body>
+</html>
