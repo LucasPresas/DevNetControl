@@ -10,7 +10,7 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Configurations
         {
             builder.HasKey(ct => ct.Id);
             builder.Property(ct => ct.Amount).HasColumnType("decimal(18,2)");
-            builder.Property(ct => ct.Description).HasMaxLength(500);
+            builder.Property(ct => ct.Note).HasMaxLength(500);
         }
     }
 }

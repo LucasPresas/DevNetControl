@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using DevNetControl.Api.Domain;
+using BC = BCrypt.Net.BCrypt; // Alias para que sea más fácil de usar
 
 // 1. VERIFICÁ QUE EL NAMESPACE SEA ESTE:
 namespace DevNetControl.Api.Infrastructure.Persistence
@@ -17,9 +18,9 @@ namespace DevNetControl.Api.Infrastructure.Persistence
             {
                 Id = Guid.NewGuid(),
                 UserName = "admin",
-                PasswordHash = "admin123", 
+                PasswordHash = BC.HashPassword("admin123"),
                 Role = UserRole.Admin,
-                Credits = 9999
+                Credits = 9999999
             };
 
             context.Users.Add(admin);

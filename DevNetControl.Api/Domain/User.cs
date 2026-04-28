@@ -20,7 +20,7 @@ namespace DevNetControl.Api.Domain
         public string UserName {get; set;} = string.Empty;
         public string PasswordHash {get; set;} = string.Empty;
         public UserRole Role {get; set;}
-        public int Credits {get; set;} = 0;
+        public decimal Credits {get; set;} = 0;
 
         public Guid? ParentId {get; set;}
         public User? Parent {get; set;}
