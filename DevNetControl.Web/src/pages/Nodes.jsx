@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../lib/api'
-import { Server, Plus, Loader2, AlertCircle, CheckCircle, Wifi, WifiOff } from 'lucide-react'
+import { Server, Plus, Loader2, AlertCircle, CheckCircle, Wifi } from 'lucide-react'
 
 export default function Nodes() {
   const [nodes, setNodes] = useState([])
@@ -55,7 +55,7 @@ export default function Nodes() {
       const { data } = await api.post(`/vpsnode/${id}/test-connection`)
       setMessage({ type: 'success', text: data.message })
     } catch (err) {
-      setMessage({ type: 'error', text: err.response?.data?.message || 'Error de conexión' })
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Error de conexion' })
     }
   }
 
@@ -70,7 +70,7 @@ export default function Nodes() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-900">Nodos VPS</h2>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Nodos VPS</h2>
         <button
           onClick={() => setShowForm(!showForm)}
           className="flex items-center gap-2 bg-primary-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
@@ -82,16 +82,16 @@ export default function Nodes() {
 
       {/* Create Form */}
       {showForm && (
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 space-y-3">
-          <h3 className="font-semibold text-gray-900">Nuevo nodo</h3>
+        <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 space-y-3 transition-colors">
+          <h3 className="font-semibold text-gray-900 dark:text-white">Nuevo nodo</h3>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Etiqueta</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Etiqueta</label>
             <input
               type="text"
               value={form.label}
               onChange={(e) => setForm({ ...form, label: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
               placeholder="VPS-Principal"
               required
             />
@@ -99,23 +99,23 @@ export default function Nodes() {
 
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">IP</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">IP</label>
               <input
                 type="text"
                 value={form.ip}
                 onChange={(e) => setForm({ ...form, ip: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                 placeholder="192.168.1.1"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Puerto</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Puerto</label>
               <input
                 type="number"
                 value={form.sshPort}
                 onChange={(e) => setForm({ ...form, sshPort: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                 placeholder="22"
                 required
               />
@@ -123,13 +123,13 @@ export default function Nodes() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña SSH</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contrasena SSH</label>
             <input
               type="password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-              placeholder="Contraseña root"
+              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+              placeholder="Contrasena root"
               required
             />
           </div>
@@ -146,7 +146,7 @@ export default function Nodes() {
             <button
               type="button"
               onClick={() => { setShowForm(false); setMessage(null) }}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
+              className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 dark:text-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               Cancelar
             </button>
@@ -156,7 +156,7 @@ export default function Nodes() {
 
       {message && (
         <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm ${
-          message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          message.type === 'success' ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400'
         }`}>
           {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
           {message.text}
@@ -165,9 +165,9 @@ export default function Nodes() {
 
       {/* Nodes List */}
       {nodes.length === 0 ? (
-        <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100">
-          <Server className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">No tenés nodos configurados</p>
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-8 text-center shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+          <Server className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+          <p className="text-gray-500 dark:text-gray-400">No tenes nodos configurados</p>
         </div>
       ) : (
         <div className="grid gap-3">
@@ -175,22 +175,22 @@ export default function Nodes() {
             <Link
               key={node.id}
               to={`/nodes/${node.id}`}
-              className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:border-primary-200 hover:shadow-md transition-all block"
+              className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 hover:border-primary-200 dark:hover:border-primary-800 hover:shadow-md transition-all block"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                    <Server className="w-5 h-5 text-primary-600" />
+                  <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-lg flex items-center justify-center">
+                    <Server className="w-5 h-5 text-primary-600 dark:text-primary-400" />
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900">{node.label}</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{node.label}</p>
                     <p className="text-xs text-gray-400 font-mono">{node.ip}:{node.sshPort}</p>
                   </div>
                 </div>
                 <button
                   onClick={(e) => { e.preventDefault(); handleTest(node.id) }}
-                  className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                  aria-label="Test conexión"
+                  className="p-2 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                  aria-label="Test conexion"
                 >
                   <Wifi className="w-4 h-4" />
                 </button>

@@ -1,22 +1,34 @@
 using Microsoft.EntityFrameworkCore;
 using DevNetControl.Api.Domain;
-using BC = BCrypt.Net.BCrypt; // Alias para que sea más fácil de usar
+using BC = BCrypt.Net.BCrypt;
 
-// 1. VERIFICÁ QUE EL NAMESPACE SEA ESTE:
 namespace DevNetControl.Api.Infrastructure.Persistence
 {
-    // 2. VERIFICÁ QUE SEA 'PUBLIC STATIC CLASS'
     public static class DbInitializer
     {
         public static async Task SeedAsync(ApplicationDbContext context)
         {
             await context.Database.EnsureCreatedAsync();
 
-            if (await context.Users.AnyAsync()) return;
+            if (await context.Tenants.AnyAsync()) return;
+
+            var defaultTenant = new Tenant
+            {
+                Id = Guid.NewGuid(),
+                Name = "Default Tenant",
+                Subdomain = "default",
+                AdminEmail = "admin@devnetcontrol.com",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            context.Tenants.Add(defaultTenant);
+            await context.SaveChangesAsync();
 
             var admin = new User
             {
                 Id = Guid.NewGuid(),
+                TenantId = defaultTenant.Id,
                 UserName = "admin",
                 PasswordHash = BC.HashPassword("admin123"),
                 Role = UserRole.Admin,

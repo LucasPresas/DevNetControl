@@ -47,11 +47,12 @@
 
 [x] Monitoreo Básico: Endpoint GET /api/vpsnode/{id}/metrics (CPU, RAM, disco, uptime).
 
-🔴 Fase 5: Pulido y Despliegue (¡Completada!)
-[x] Validaciones: FluentValidation implementado en todos los endpoints.
-
-[x] Manejo Global de Errores: Middleware GlobalExceptionHandler para respuestas JSON consistentes.
-
-[x] Dockerización: Dockerfile multi-stage y docker-compose.yml con PostgreSQL.
-
-[x] Seguridad Producción: Variables de entorno para JWT, encryption key y DB password.
+🟢 Fase 6: SaaS Multi-Tenant + Frontend Dark Mode (¡Completada!)
+[x] Entidad Tenant con Subdomain, Name, IsActive
+[x] TenantId agregado a User, VpsNode, CreditTransaction
+[x] Global Query Filters en EF Core (aislamiento automatico por tenant)
+[x] TenantId claim en JWT para aislamiento a nivel API
+[x] Rol SuperAdmin para gestion de tenants desde plataforma
+[x] SuperAdminController (crear tenant, toggle activo, stats globales)
+[x] Dark Mode toggle en el frontend (persiste en localStorage)
+[x] Todos los componentes actualizados con clases dark:

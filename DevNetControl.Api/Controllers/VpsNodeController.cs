@@ -28,14 +28,15 @@ public class VpsNodeController : ControllerBase
     [Authorize(Policy = "ResellerOrAbove")]
     public async Task<IActionResult> CreateNode([FromBody] CreateNodeRequest request)
     {
-        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var role = ClaimsHelper.GetCurrentRole(User);
 
-        if (role != "Admin")
+        if (role != "Admin" && role != "SuperAdmin")
         {
             var user = await _context.Users.FindAsync(userId);
             if (user == null || user.Credits < request.CreditCost)
-                return BadRequest(new { Message = "Créditos insuficientes." });
+                return BadRequest(new { Message = "Creditos insuficientes." });
 
             user.Credits -= request.CreditCost;
         }
@@ -43,6 +44,7 @@ public class VpsNodeController : ControllerBase
         var newNode = new VpsNode
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             IP = request.IP,
             SshPort = request.SshPort,
             label = request.Label,
@@ -59,11 +61,12 @@ public class VpsNodeController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetMyNodes()
     {
-        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var role = ClaimsHelper.GetCurrentRole(User);
 
         var nodes = await _context.VpsNodes
-            .Where(n => role == "Admin" || n.OwnerId == userId)
+            .Where(n => n.TenantId == tenantId && (role == "Admin" || role == "SuperAdmin" || n.OwnerId == userId))
             .Select(n => new { n.Id, n.IP, n.SshPort, n.label, n.OwnerId })
             .ToListAsync();
 
@@ -73,14 +76,15 @@ public class VpsNodeController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetNode(Guid id)
     {
-        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var role = ClaimsHelper.GetCurrentRole(User);
 
-        var node = await _context.VpsNodes.FindAsync(id);
+        var node = await _context.VpsNodes.FirstOrDefaultAsync(n => n.Id == id && n.TenantId == tenantId);
         if (node == null)
             return NotFound(new { Message = "Nodo no encontrado." });
 
-        if (role != "Admin" && node.OwnerId != userId)
+        if (role != "Admin" && role != "SuperAdmin" && node.OwnerId != userId)
             return Forbid();
 
         return Ok(new { node.Id, node.IP, node.SshPort, node.label, node.OwnerId });
@@ -89,14 +93,15 @@ public class VpsNodeController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateNode(Guid id, [FromBody] UpdateNodeRequest request)
     {
-        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var role = ClaimsHelper.GetCurrentRole(User);
 
         var node = await _context.VpsNodes.FindAsync(id);
-        if (node == null)
+        if (node == null || node.TenantId != tenantId)
             return NotFound(new { Message = "Nodo no encontrado." });
 
-        if (role != "Admin" && node.OwnerId != userId)
+        if (role != "Admin" && role != "SuperAdmin" && node.OwnerId != userId)
             return Forbid();
 
         if (!string.IsNullOrEmpty(request.IP))
@@ -119,14 +124,15 @@ public class VpsNodeController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteNode(Guid id)
     {
-        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var role = ClaimsHelper.GetCurrentRole(User);
 
         var node = await _context.VpsNodes.FindAsync(id);
-        if (node == null)
+        if (node == null || node.TenantId != tenantId)
             return NotFound(new { Message = "Nodo no encontrado." });
 
-        if (role != "Admin" && node.OwnerId != userId)
+        if (role != "Admin" && role != "SuperAdmin" && node.OwnerId != userId)
             return Forbid();
 
         _context.VpsNodes.Remove(node);
@@ -138,14 +144,15 @@ public class VpsNodeController : ControllerBase
     [HttpPost("{id}/test-connection")]
     public async Task<IActionResult> TestConnection(Guid id)
     {
-        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var role = ClaimsHelper.GetCurrentRole(User);
 
-        var node = await _context.VpsNodes.FindAsync(id);
+        var node = await _context.VpsNodes.FirstOrDefaultAsync(n => n.Id == id && n.TenantId == tenantId);
         if (node == null)
             return NotFound(new { Message = "Nodo no encontrado." });
 
-        if (role != "Admin" && node.OwnerId != userId)
+        if (role != "Admin" && role != "SuperAdmin" && node.OwnerId != userId)
             return Forbid();
 
         var result = await _sshService.TestConnectionAsync(id);
@@ -159,14 +166,15 @@ public class VpsNodeController : ControllerBase
     [Authorize(Policy = "ResellerOrAbove")]
     public async Task<IActionResult> ExecuteCommand(Guid id, [FromBody] ExecuteCommandRequest request)
     {
-        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var role = ClaimsHelper.GetCurrentRole(User);
 
-        var node = await _context.VpsNodes.FindAsync(id);
+        var node = await _context.VpsNodes.FirstOrDefaultAsync(n => n.Id == id && n.TenantId == tenantId);
         if (node == null)
             return NotFound(new { Message = "Nodo no encontrado." });
 
-        if (role != "Admin" && node.OwnerId != userId)
+        if (role != "Admin" && role != "SuperAdmin" && node.OwnerId != userId)
             return Forbid();
 
         var result = await _sshService.ExecuteCommandAsync(id, request.Command);
@@ -180,14 +188,15 @@ public class VpsNodeController : ControllerBase
     [HttpGet("{id}/metrics")]
     public async Task<IActionResult> GetMetrics(Guid id)
     {
-        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var role = ClaimsHelper.GetCurrentRole(User);
 
-        var node = await _context.VpsNodes.FindAsync(id);
+        var node = await _context.VpsNodes.FirstOrDefaultAsync(n => n.Id == id && n.TenantId == tenantId);
         if (node == null)
             return NotFound(new { Message = "Nodo no encontrado." });
 
-        if (role != "Admin" && node.OwnerId != userId)
+        if (role != "Admin" && role != "SuperAdmin" && node.OwnerId != userId)
             return Forbid();
 
         var result = await _sshService.GetSystemMetricsAsync(id);

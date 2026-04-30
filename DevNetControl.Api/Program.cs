@@ -13,19 +13,13 @@ using DevNetControl.Api.Validators;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ==========================================
-// 1. CONFIGURACIÓN DE SERVICIOS (DI)
-// ==========================================
-
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// VALIDACIÓN CON FLUENTVALIDATION
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddFluentValidationClientsideAdapters();
 builder.Services.AddValidatorsFromAssemblyContaining<LoginRequestValidator>();
 
-// CONFIGURACIÓN DE SWAGGER CON JWT
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "DevNetControl API", Version = "v1" });
@@ -56,13 +50,11 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Servicios de Negocio y Seguridad
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<CreditService>();
 builder.Services.AddScoped<EncryptionService>();
 builder.Services.AddScoped<SshService>();
 
-// Configuración de la Base de Datos
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
@@ -76,11 +68,21 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     }
 });
 
-// Leer JWT Key desde variable de entorno o configuración
-var jwtKey = Environment.GetEnvironmentVariable("DEVNETCONTROL_JWT_KEY") 
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
+{
+    if (connectionString != null && connectionString.Contains("Data Source"))
+    {
+        options.UseSqlite(connectionString);
+    }
+    else
+    {
+        options.UseNpgsql(connectionString);
+    }
+});
+
+var jwtKey = Environment.GetEnvironmentVariable("DEVNETCONTROL_JWT_KEY")
     ?? builder.Configuration["Jwt:Key"]!;
 
-// Configuración de Autenticación JWT
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -99,21 +101,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// Políticas de Autorización
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
-    options.AddPolicy("ResellerOrAbove", policy => policy.RequireRole("Admin", "Reseller"));
-    options.AddPolicy("SubResellerOrAbove", policy => policy.RequireRole("Admin", "Reseller", "SubReseller"));
+    options.AddPolicy("SuperAdminOnly", policy => policy.RequireRole("SuperAdmin"));
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole("SuperAdmin", "Admin"));
+    options.AddPolicy("ResellerOrAbove", policy => policy.RequireRole("SuperAdmin", "Admin", "Reseller"));
+    options.AddPolicy("SubResellerOrAbove", policy => policy.RequireRole("SuperAdmin", "Admin", "Reseller", "SubReseller"));
 });
 
 var app = builder.Build();
 
-// ==========================================
-// 2. MIDDLEWARE PIPELINE
-// ==========================================
-
-// Manejo global de errores (siempre primero)
 app.UseGlobalExceptionHandler();
 
 if (app.Environment.IsDevelopment())
@@ -124,15 +121,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// El orden es sagrado
-app.UseAuthentication(); 
-app.UseAuthorization();  
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
-
-// ==========================================
-// 3. INICIALIZACIÓN
-// ==========================================
 
 using (var scope = app.Services.CreateScope())
 {
@@ -146,7 +138,7 @@ using (var scope = app.Services.CreateScope())
     catch (Exception ex)
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "Error crítico durante la inicialización.");
+        logger.LogError(ex, "Error critico durante la inicializacion.");
     }
 }
 

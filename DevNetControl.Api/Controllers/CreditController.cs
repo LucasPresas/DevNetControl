@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using DevNetControl.Api.Infrastructure.Services;
-using DevNetControl.Api.Domain;
+using DevNetControl.Api.Infrastructure.Security;
 using System.Security.Claims;
 
 namespace DevNetControl.Api.Controllers;
@@ -21,9 +21,10 @@ public class CreditController : ControllerBase
     [HttpPost("transfer")]
     public async Task<IActionResult> Transfer([FromBody] TransferRequest request)
     {
-        var senderId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        
-        var result = await _creditService.TransferCreditsAsync(senderId, request.ToUserId, request.Amount);
+        var senderId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+
+        var result = await _creditService.TransferCreditsAsync(senderId, request.ToUserId, request.Amount, tenantId);
 
         if (!result.Success) return BadRequest(new { Message = result.Message });
 
@@ -33,20 +34,21 @@ public class CreditController : ControllerBase
     [HttpGet("balance")]
     public async Task<IActionResult> GetBalance()
     {
-        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+
         var balance = await _creditService.GetUserBalanceAsync(userId);
-        
+
         return Ok(new { UserId = userId, Balance = balance });
     }
 
     [HttpGet("history")]
     public async Task<IActionResult> GetHistory()
     {
-        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        
-        var history = await _creditService.GetTransactionHistoryAsync(userId, 50);
-        
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+
+        var history = await _creditService.GetTransactionHistoryAsync(userId, tenantId, 50);
+
         return Ok(history);
     }
 }

@@ -25,17 +25,16 @@ public class UserController : ControllerBase
     [Authorize(Policy = "SubResellerOrAbove")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
     {
-        var parentIdClaim = User.FindFirst("UserId")?.Value;
-        if (parentIdClaim == null) return Unauthorized();
-        
-        var parentId = Guid.Parse(parentIdClaim);
+        var parentId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
 
-        if (await _context.Users.AnyAsync(u => u.UserName == request.UserName))
+        if (await _context.Users.AnyAsync(u => u.UserName == request.UserName && u.TenantId == tenantId))
             return BadRequest("El nombre de usuario ya existe.");
 
         var newUser = new User
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             UserName = request.UserName,
             PasswordHash = BC.HashPassword(request.Password),
             Role = request.Role,
@@ -46,13 +45,13 @@ public class UserController : ControllerBase
         _context.Users.Add(newUser);
         await _context.SaveChangesAsync();
 
-        return Ok(new { Message = "Usuario creado con éxito", UserId = newUser.Id });
+        return Ok(new { Message = "Usuario creado con exito", UserId = newUser.Id });
     }
 
     [HttpGet("my-subusers")]
     public async Task<IActionResult> GetMySubUsers()
     {
-        var parentId = Guid.Parse(User.FindFirst("UserId")!.Value);
+        var parentId = ClaimsHelper.GetCurrentUserId(User);
         var subUsers = await _context.Users
             .Where(u => u.ParentId == parentId)
             .Select(u => new { u.Id, u.UserName, u.Role, u.Credits })
@@ -64,8 +63,8 @@ public class UserController : ControllerBase
     [HttpGet("me")]
     public async Task<IActionResult> GetMyProfile()
     {
-        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+
         var user = await _context.Users
             .Include(u => u.Parent)
             .FirstOrDefaultAsync(u => u.Id == userId);
@@ -85,26 +84,27 @@ public class UserController : ControllerBase
     [HttpGet("me/hierarchy")]
     public async Task<IActionResult> GetMyHierarchy()
     {
-        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+
         var hierarchy = await BuildHierarchyTreeAsync(userId);
-        
+
         return Ok(hierarchy);
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetUser(Guid id)
     {
-        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        var currentRole = User.FindFirst(ClaimTypes.Role)?.Value;
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var currentRole = ClaimsHelper.GetCurrentRole(User);
 
         var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Id == id);
+            .FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
 
         if (user == null)
             return NotFound(new { Message = "Usuario no encontrado" });
 
-        if (currentRole != "Admin" && user.ParentId != userId)
+        if (currentRole != "Admin" && currentRole != "SuperAdmin" && user.ParentId != userId)
             return Forbid();
 
         return Ok(new {
@@ -118,21 +118,22 @@ public class UserController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateMyUserRequest request)
     {
-        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
-        var currentRole = User.FindFirst(ClaimTypes.Role)?.Value;
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var currentRole = ClaimsHelper.GetCurrentRole(User);
 
-        if (currentRole != "Admin" && id != userId)
+        if (currentRole != "Admin" && currentRole != "SuperAdmin" && id != userId)
             return Forbid();
 
         var user = await _context.Users.FindAsync(id);
-        if (user == null)
+        if (user == null || user.TenantId != tenantId)
             return NotFound(new { Message = "Usuario no encontrado" });
 
         if (!string.IsNullOrWhiteSpace(request.UserName))
         {
-            if (await _context.Users.AnyAsync(u => u.UserName == request.UserName && u.Id != id))
+            if (await _context.Users.AnyAsync(u => u.UserName == request.UserName && u.Id != id && u.TenantId == tenantId))
                 return BadRequest("El nombre de usuario ya existe.");
-            
+
             user.UserName = request.UserName;
         }
 

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using DevNetControl.Api.Infrastructure.Persistence;
 using DevNetControl.Api.Infrastructure.Services;
+using DevNetControl.Api.Infrastructure.Security;
 using DevNetControl.Api.Domain;
 using BC = BCrypt.Net.BCrypt;
 
@@ -10,7 +11,6 @@ namespace DevNetControl.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "AdminOnly")]
 public class AdminController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
@@ -23,19 +23,24 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("dashboard-data")]
+    [Authorize(Policy = "AdminOnly")]
     public IActionResult GetSensitiveData()
     {
         return Ok(new {
-            Message = "Bienvenido, Admin. Estás viendo datos que solo el Admin puede ver.",
+            Message = "Bienvenido, Admin. Datos solo visibles para administradores.",
             ServerStatus = "All nodes operational",
             TotalRevenue = 1500.50
         });
     }
 
     [HttpGet("users")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetAllUsers()
     {
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+
         var users = await _context.Users
+            .Where(u => u.TenantId == tenantId)
             .Include(u => u.OwnedNodes)
             .Select(u => new {
                 u.Id,
@@ -52,13 +57,16 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("users/{id}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetUserDetail(Guid id)
     {
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+
         var user = await _context.Users
             .Include(u => u.Parent)
             .Include(u => u.Subordinates)
             .Include(u => u.OwnedNodes)
-            .FirstOrDefaultAsync(u => u.Id == id);
+            .FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
 
         if (user == null)
             return NotFound(new { Message = "Usuario no encontrado" });
@@ -75,10 +83,13 @@ public class AdminController : ControllerBase
     }
 
     [HttpPut("users/{id}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserRequest request)
     {
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+
         var user = await _context.Users.FindAsync(id);
-        if (user == null)
+        if (user == null || user.TenantId != tenantId)
             return NotFound(new { Message = "Usuario no encontrado" });
 
         if (request.Role.HasValue)
@@ -93,20 +104,23 @@ public class AdminController : ControllerBase
     }
 
     [HttpDelete("users/{id}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeleteUser(Guid id)
     {
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+
         var user = await _context.Users
             .Include(u => u.Subordinates)
-            .FirstOrDefaultAsync(u => u.Id == id);
+            .FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
 
         if (user == null)
             return NotFound(new { Message = "Usuario no encontrado" });
 
-        if (user.Role == UserRole.Admin)
+        if (user.Role == UserRole.Admin || user.Role == UserRole.SuperAdmin)
             return BadRequest(new { Message = "No se puede eliminar el administrador principal" });
 
         if (user.Subordinates.Any())
-            return BadRequest(new { Message = "El usuario tiene subordinados. Reasignálos primero." });
+            return BadRequest(new { Message = "El usuario tiene subordinados. Reasignalos primero." });
 
         _context.Users.Remove(user);
         await _context.SaveChangesAsync();
@@ -115,10 +129,12 @@ public class AdminController : ControllerBase
     }
 
     [HttpPost("users/{id}/add-credits")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> AddCredits(Guid id, [FromBody] AddCreditsRequest request)
     {
-        var result = await _creditService.AddCreditsAsync(id, request.Amount);
-        
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var result = await _creditService.AddCreditsAsync(id, request.Amount, tenantId);
+
         if (!result.Success)
             return BadRequest(new { Message = result.Message });
 
