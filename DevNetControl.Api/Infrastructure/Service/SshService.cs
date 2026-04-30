@@ -2,16 +2,10 @@ using DevNetControl.Api.Domain;
 using DevNetControl.Api.Infrastructure.Persistence;
 using DevNetControl.Api.Infrastructure.Security;
 using Renci.SshNet;
-using Renci.SshNet.Common;
 using System.Text.RegularExpressions;
 
 namespace DevNetControl.Api.Infrastructure.Services;
 
-// REFACTOR: El servicio ahora es más robusto, eficiente y seguro.
-// 1. Centraliza la lógica de conexión en un método privado.
-// 2. Usa Task.Run para no bloquear los hilos del servidor con operaciones síncronas de red.
-// 3. Optimiza la obtención de métricas para usar una sola conexión SSH.
-// 4. Añade una capa básica de seguridad contra inyección de comandos.
 public class SshService
 {
     private readonly ApplicationDbContext _context;
@@ -23,72 +17,69 @@ public class SshService
         _encryption = encryption;
     }
 
-    private async Task<(SshClient? Client, string? ErrorMessage)> GetConnectedClientAsync(Guid nodeId)
+    // FIX CS1061: GetActiveSessionsAsync para el MonitorController
+    public async Task<(int Count, List<int> Pids)> GetActiveSessionsAsync(Guid nodeId, string username)
     {
-        var node = await _context.VpsNodes.FindAsync(nodeId);
-        if (node == null)
-        {
-            return (null, "Nodo no encontrado.");
-        }
+        var command = $"ps -u {username} -o pid,comm | grep sshd | awk '{{print $1}}'";
+        var result = await ExecuteCommandAsync(nodeId, command);
 
-        try
-        {
-            var password = _encryption.Decrypt(node.EncryptedPassword);
-            var client = new SshClient(node.IP, node.SshPort, "root", password);
+        if (!result.Success || string.IsNullOrWhiteSpace(result.Output))
+            return (0, new List<int>());
 
-            // Envolvemos la llamada bloqueante en Task.Run para no agotar los hilos de ASP.NET
-            await Task.Run(() => client.Connect());
+        var pids = result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => int.TryParse(p, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .ToList();
 
-            if (!client.IsConnected)
-            {
-                return (null, "No se pudo establecer conexión con el nodo.");
-            }
-
-            return (client, null);
-        }
-        catch (SshAuthenticationException ex)
-        {
-            return (null, $"Error de autenticación: {ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            return (null, $"Error de conexión: {ex.Message}");
-        }
+        return (pids.Count, pids);
     }
 
+    // FIX CS1061: EnforcementKickAsync para el MonitorController
+    public async Task<bool> EnforcementKickAsync(Guid nodeId, string username, int maxAllowed)
+    {
+        var (count, pids) = await GetActiveSessionsAsync(nodeId, username);
+        
+        if (count > maxAllowed && pids.Count > 0)
+        {
+            // Matamos el proceso más antiguo para liberar cupo
+            await ExecuteCommandAsync(nodeId, $"kill -9 {pids.First()}");
+            return true;
+        }
+        return false;
+    }
+
+    // FIX CS1061: TestConnectionAsync para VpsNodeController
     public async Task<(bool Connected, string Message)> TestConnectionAsync(Guid nodeId)
     {
-        var (client, errorMessage) = await GetConnectedClientAsync(nodeId);
-
-        if (client == null)
-        {
-            return (false, errorMessage ?? "Error desconocido.");
-        }
+        var (client, error) = await GetConnectedClientAsync(nodeId);
+        if (client == null) return (false, error ?? "Error de conexión.");
 
         using (client)
         {
-            var message = $"Conexión exitosa a {client.ConnectionInfo.Host}:{client.ConnectionInfo.Port}";
-            client.Disconnect();
-            return (true, message);
+            var msg = $"Conexión exitosa a {client.ConnectionInfo.Host}";
+            await Task.Run(() => client.Disconnect());
+            return (true, msg);
         }
+    }
+
+    // FIX CS1061: GetSystemMetricsAsync para VpsNodeController
+    public async Task<(bool Success, string Output, string Error)> GetSystemMetricsAsync(Guid nodeId)
+    {
+        const string metricsScript = @"
+            CPU=$(top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | head -1)
+            MEM=$(free -m | awk 'NR==2{printf ""%.1f/%.1f MB (%.1f%%)"", $3,$2,$3*100/$2 }')
+            DISK=$(df -h / | awk 'NR==2{printf ""%s/%s (%s)"", $3,$2,$5}')
+            echo ""CPU: $CPU% | Mem: $MEM | Disk: $DISK""";
+
+        return await ExecuteCommandAsync(nodeId, metricsScript);
     }
 
     public async Task<(bool Success, string Output, string Error)> ExecuteCommandAsync(Guid nodeId, string command)
     {
-        // REGLA DE ORO #3: SANITIZACIÓN DE COMANDOS
-        // Esta es una mitigación básica. La estrategia ideal es no permitir comandos de texto libre.
-        // En su lugar, la API debería recibir un "nombre de comando" y parámetros, y este servicio
-        // construiría el comando real a partir de una plantilla segura.
-        if (Regex.IsMatch(command, @"[;`&|]"))
-        {
-            return (false, string.Empty, "El comando contiene caracteres no permitidos por seguridad.");
-        }
+        if (Regex.IsMatch(command, @"[;`&|]")) return (false, "", "Comando no seguro.");
 
-        var (client, errorMessage) = await GetConnectedClientAsync(nodeId);
-        if (client == null)
-        {
-            return (false, string.Empty, errorMessage ?? "Error desconocido.");
-        }
+        var (client, error) = await GetConnectedClientAsync(nodeId);
+        if (client == null) return (false, "", error ?? "Error de conexión.");
 
         using (client)
         {
@@ -98,52 +89,22 @@ public class SshService
                 var result = await Task.Run(() => cmd.Execute());
                 return (cmd.ExitStatus == 0, result, cmd.Error);
             }
-            catch (Exception ex)
-            {
-                return (false, string.Empty, $"Error ejecutando comando: {ex.Message}");
-            }
+            catch (Exception ex) { return (false, "", ex.Message); }
         }
     }
 
-
-    public async Task<(bool Success, string Output, string Error)> GetSystemMetricsAsync(Guid nodeId)
+    private async Task<(SshClient? Client, string? ErrorMessage)> GetConnectedClientAsync(Guid nodeId)
     {
-        var (client, errorMessage) = await GetConnectedClientAsync(nodeId);
-        if (client == null)
+        var node = await _context.VpsNodes.FindAsync(nodeId);
+        if (node == null) return (null, "Nodo no encontrado.");
+
+        try
         {
-            return (false, string.Empty, errorMessage ?? "Error desconocido.");
+            var password = _encryption.Decrypt(node.EncryptedPassword);
+            var client = new SshClient(node.IP, node.SshPort, "root", password);
+            await Task.Run(() => client.Connect());
+            return client.IsConnected ? (client, null) : (null, "No se pudo conectar.");
         }
-
-        using (client)
-        {
-            try
-            {
-                // Optimizacion: Ejecutamos todos los comandos en una sola sesión SSH.
-                const string metricsScript = @"
-                    CPU=$(top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | head -1)
-                    MEM=$(free -m | awk 'NR==2{printf ""%.1f/%.1f MB (%.1f%%)"", $3,$2,$3*100/$2 }')
-                    DISK=$(df -h / | awk 'NR==2{printf ""%s/%s (%s)"", $3,$2,$5}')
-                    UPTIME=$(uptime -p)
-                    echo ""CPU: $CPU%""
-                    echo ""Memoria: $MEM""
-                    echo ""Disco: $DISK""
-                    echo ""Uptime: $UPTIME""
-                ";
-
-                var cmd = client.CreateCommand(metricsScript);
-                var output = await Task.Run(() => cmd.Execute());
-
-                if (cmd.ExitStatus != 0)
-                {
-                    return (false, string.Empty, cmd.Error);
-                }
-                
-                return (true, output.Trim(), string.Empty);
-            }
-            catch (Exception ex)
-            {
-                return (false, string.Empty, $"Error obteniendo métricas: {ex.Message}");
-            }
-        }
+        catch (Exception ex) { return (null, ex.Message); }
     }
 }

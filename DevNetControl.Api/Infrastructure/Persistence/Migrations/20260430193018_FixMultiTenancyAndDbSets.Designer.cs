@@ -3,6 +3,7 @@ using System;
 using DevNetControl.Api.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260430193018_FixMultiTenancyAndDbSets")]
+    partial class FixMultiTenancyAndDbSets
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.7");
@@ -70,9 +73,10 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("NodeId");
-
                     b.HasIndex("UserId");
+
+                    b.HasIndex("NodeId", "UserId")
+                        .IsUnique();
 
                     b.ToTable("NodeAccesses");
                 });
@@ -133,9 +137,10 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PlanId");
-
                     b.HasIndex("UserId");
+
+                    b.HasIndex("PlanId", "UserId")
+                        .IsUnique();
 
                     b.ToTable("PlanAccesses");
                 });
@@ -218,6 +223,9 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Subdomain")
+                        .IsUnique();
 
                     b.ToTable("Tenants");
                 });
@@ -422,7 +430,7 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                     b.HasOne("DevNetControl.Api.Domain.Tenant", "Tenant")
                         .WithMany("Users")
                         .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Parent");
@@ -443,7 +451,7 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                     b.HasOne("DevNetControl.Api.Domain.Tenant", "Tenant")
                         .WithMany("VpsNodes")
                         .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Owner");
