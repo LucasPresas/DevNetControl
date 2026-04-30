@@ -23,10 +23,20 @@ namespace DevNetControl.Api.Domain
         public int MaxDevices { get; set; } = 1;
         public DateTime? ServiceExpiry { get; set; }
 
+        public bool IsTrial { get; set; }
+        public DateTime? TrialExpiry { get; set; }
+        public bool IsProvisionedOnVps { get; set; }
+        public bool IsActive { get; set; } = true;
+
+        public Guid? PlanId { get; set; }
+        public Plan? Plan { get; set; }
+
         public Guid? ParentId { get; set; }
         public User? Parent { get; set; }
         public ICollection<User> Subordinates { get; set; } = new List<User>();
         public ICollection<VpsNode> OwnedNodes { get; set; } = new List<VpsNode>();
+        public ICollection<SessionLog> Sessions { get; set; } = new List<SessionLog>();
+        public ICollection<PlanAccess> PlanAccesses { get; set; } = new List<PlanAccess>();
 
         public Tenant Tenant { get; set; } = null!;
     }

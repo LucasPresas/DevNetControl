@@ -3,6 +3,7 @@ using System;
 using DevNetControl.Api.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260430170946_AddUserIsActive")]
+    partial class AddUserIsActive
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.7");
@@ -94,7 +97,7 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("DurationHours")
+                    b.Property<int>("DurationDays")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsActive")
@@ -118,33 +121,6 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId");
 
                     b.ToTable("Plans");
-                });
-
-            modelBuilder.Entity("DevNetControl.Api.Domain.PlanAccess", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("PlanId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("UserId1")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("UserId1");
-
-                    b.HasIndex("PlanId", "UserId")
-                        .IsUnique();
-
-                    b.ToTable("PlanAccesses");
                 });
 
             modelBuilder.Entity("DevNetControl.Api.Domain.SessionLog", b =>
@@ -383,29 +359,6 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("DevNetControl.Api.Domain.PlanAccess", b =>
-                {
-                    b.HasOne("DevNetControl.Api.Domain.Plan", "Plan")
-                        .WithMany("AllowedUsers")
-                        .HasForeignKey("PlanId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("DevNetControl.Api.Domain.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("DevNetControl.Api.Domain.User", null)
-                        .WithMany("PlanAccesses")
-                        .HasForeignKey("UserId1");
-
-                    b.Navigation("Plan");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("DevNetControl.Api.Domain.SessionLog", b =>
                 {
                     b.HasOne("DevNetControl.Api.Domain.Tenant", "Tenant")
@@ -468,8 +421,6 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("DevNetControl.Api.Domain.Plan", b =>
                 {
-                    b.Navigation("AllowedUsers");
-
                     b.Navigation("Users");
                 });
 
@@ -485,8 +436,6 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("DevNetControl.Api.Domain.User", b =>
                 {
                     b.Navigation("OwnedNodes");
-
-                    b.Navigation("PlanAccesses");
 
                     b.Navigation("Sessions");
 

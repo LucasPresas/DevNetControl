@@ -45,7 +45,8 @@ public class CreditService
                 FromUserId = fromId,
                 ToUserId = toId,
                 Amount = amount,
-                Note = $"Transferencia de {sender.UserName} a {receiver.UserName}"
+                Note = $"Transferencia de {sender.UserName} a {receiver.UserName}",
+                Type = CreditTransactionType.Transfer
             };
 
             _context.CreditTransactions.Add(audit);
@@ -84,7 +85,8 @@ public class CreditService
                 t.ToUser.UserName,
                 t.Amount,
                 t.FromUserId == userId ? "Sent" : "Received",
-                t.Note
+                t.Note,
+                t.Type
             ))
             .ToListAsync();
 
@@ -111,7 +113,8 @@ public class CreditService
                 FromUserId = userId,
                 ToUserId = userId,
                 Amount = amount,
-                Note = $"Creditos agregados manualmente: +{amount}"
+                Note = $"Creditos agregados manualmente: +{amount}",
+                Type = CreditTransactionType.ManualAdd
             };
 
             _context.CreditTransactions.Add(audit);
@@ -135,5 +138,6 @@ public record TransactionDto(
     string ToUserName,
     decimal Amount,
     string Direction,
-    string Note
+    string Note,
+    CreditTransactionType Type
 );

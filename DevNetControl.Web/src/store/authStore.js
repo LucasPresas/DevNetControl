@@ -12,12 +12,18 @@ export const useAuthStore = create((set) => ({
     set({ isLoading: true, error: null })
     try {
       const { data } = await api.post('/auth/login', { userName, password })
+      const userData = {
+        userName: data.user,
+        role: data.role,
+        userId: data.userId,
+        credits: data.credits ?? 0,
+      }
       localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify({ userName: data.user, role: data.role }))
-      set({ user: { userName: data.user, role: data.role }, token: data.token, isAuthenticated: true, isLoading: false })
+      localStorage.setItem('user', JSON.stringify(userData))
+      set({ user: userData, token: data.token, isAuthenticated: true, isLoading: false })
       return { success: true }
     } catch (err) {
-      const message = err.response?.data?.message || 'Error al iniciar sesión'
+      const message = err.response?.data?.message || 'Error al iniciar sesion'
       set({ error: message, isLoading: false })
       return { success: false, message }
     }
@@ -29,5 +35,16 @@ export const useAuthStore = create((set) => ({
     set({ user: null, token: null, isAuthenticated: false, error: null })
   },
 
-  setUser: (user) => set({ user }),
+  setUser: (user) => {
+    localStorage.setItem('user', JSON.stringify(user))
+    set({ user })
+  },
+
+  updateCredits: (credits) => {
+    set((state) => {
+      const updated = { ...state.user, credits }
+      localStorage.setItem('user', JSON.stringify(updated))
+      return { user: updated }
+    })
+  },
 }))

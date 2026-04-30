@@ -61,6 +61,9 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<CreditService>();
 builder.Services.AddScoped<EncryptionService>();
 builder.Services.AddScoped<SshService>();
+builder.Services.AddScoped<SshUserManager>();
+builder.Services.AddScoped<UserProvisioningService>();
+builder.Services.AddHostedService<UserExpirationBackgroundService>();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>

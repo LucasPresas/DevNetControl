@@ -15,5 +15,6 @@ namespace DevNetControl.Api.Domain
         public Guid OwnerId { get; set; }
         public User Owner { get; set; } = null!;
         public Tenant Tenant { get; set; } = null!;
+        public ICollection<NodeAccess> AllowedUsers { get; set; } = new List<NodeAccess>();
     }
 }

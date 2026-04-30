@@ -4,8 +4,11 @@ import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Users from './pages/Users'
+import Resellers from './pages/Resellers'
 import Credits from './pages/Credits'
 import Nodes from './pages/Nodes'
+import Plans from './pages/Plans'
+import Logs from './pages/Logs'
 import AdminPanel from './pages/AdminPanel'
 import SuperAdminPanel from './pages/SuperAdminPanel'
 import NodeDetail from './pages/NodeDetail'
@@ -39,13 +42,24 @@ export default function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="users" element={<Users />} />
+        <Route path="resellers" element={
+          <ProtectedRoute roles={['Admin', 'SuperAdmin']}>
+            <Resellers />
+          </ProtectedRoute>
+        } />
+        <Route path="plans" element={
+          <ProtectedRoute roles={['Admin', 'SuperAdmin']}>
+            <Plans />
+          </ProtectedRoute>
+        } />
         <Route path="credits" element={<Credits />} />
         <Route path="nodes" element={<Nodes />} />
         <Route path="nodes/:id" element={<NodeDetail />} />
+        <Route path="logs" element={<Logs />} />
         <Route
           path="admin"
           element={
-            <ProtectedRoute roles={['Admin']}>
+            <ProtectedRoute roles={['Admin', 'SuperAdmin']}>
               <AdminPanel />
             </ProtectedRoute>
           }

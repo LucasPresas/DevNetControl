@@ -1,29 +1,41 @@
 import { useEffect, useState } from 'react'
 import api from '../lib/api'
-import { UsersIcon, UserPlus, Loader2, AlertCircle, CheckCircle } from 'lucide-react'
-
-const ROLES = [
-  { value: '2', label: 'Reseller' },
-  { value: '3', label: 'SubReseller' },
-  { value: '4', label: 'Customer' },
-]
+import {
+  UserPlus, Loader2, Search, Filter, Clock, Server,
+  Calendar, Check, X, ChevronLeft, ChevronRight, Users as UsersIcon,
+  Trash2, PlusCircle, AlertTriangle
+} from 'lucide-react'
 
 export default function Users() {
-  const [subusers, setSubusers] = useState([])
+  const [users, setUsers] = useState([])
+  const [plans, setPlans] = useState([])
+  const [availableNodes, setAvailableNodes] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ userName: '', password: '', role: '4' })
+  const [showCreate, setShowCreate] = useState(false)
+  const [form, setForm] = useState({ userName: '', password: '', planId: '', nodeId: '' })
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState(null)
+  const [filter, setFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [selectedIds, setSelectedIds] = useState([])
+  const [showBulkExtend, setShowBulkExtend] = useState(false)
+  const [bulkExtendDays, setBulkExtendDays] = useState(30)
+  const [bulkLoading, setBulkLoading] = useState(false)
 
   useEffect(() => {
-    fetchSubusers()
+    fetchData()
   }, [])
 
-  async function fetchSubusers() {
+  async function fetchData() {
     try {
-      const { data } = await api.get('/user/my-subusers')
-      setSubusers(data)
+      const [usersRes, plansRes, nodesRes] = await Promise.all([
+        api.get('/user/my-subusers'),
+        api.get('/plan/my-plans'),
+        api.get('/nodeaccess/my-nodes'),
+      ])
+      setUsers(usersRes.data)
+      setPlans(plansRes.data)
+      setAvailableNodes(nodesRes.data)
     } catch (err) {
       console.error('Error:', err)
     } finally {
@@ -37,141 +49,373 @@ export default function Users() {
     setMessage(null)
 
     try {
-      const { data } = await api.post('/user/create-subuser', {
+      const { data } = await api.post('/user/create', {
         userName: form.userName,
         password: form.password,
-        role: parseInt(form.role),
+        planId: form.planId,
+        nodeId: form.nodeId || null,
       })
-      setMessage({ type: 'success', text: data.message || 'Usuario creado correctamente' })
-      setForm({ userName: '', password: '', role: '4' })
-      setShowForm(false)
-      fetchSubusers()
+      setMessage({ type: 'success', text: data.message })
+      setForm({ userName: '', password: '', planId: '', nodeId: '' })
+      setShowCreate(false)
+      fetchData()
     } catch (err) {
-      const errorMessage = typeof err.response?.data === 'string' 
-        ? err.response?.data 
-        : err.response?.data?.message || err.message || 'Error al crear usuario'
-      setMessage({ type: 'error', text: errorMessage })
-      console.error('Error:', err)
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Error al crear usuario' })
     } finally {
       setSubmitting(false)
     }
   }
 
+  const filteredUsers = users.filter(u => {
+    if (search && !u.userName.toLowerCase().includes(search.toLowerCase())) return false
+    if (filter === 'active') return u.serviceExpiry && new Date(u.serviceExpiry) > new Date() && !u.isTrial
+    if (filter === 'expired') return u.serviceExpiry && new Date(u.serviceExpiry) <= new Date()
+    if (filter === 'trial') return u.isTrial
+    return true
+  })
+
+  function toggleSelect(id) {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.length === filteredUsers.length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(filteredUsers.map(u => u.id))
+    }
+  }
+
+  async function handleBulkExtend() {
+    if (selectedIds.length === 0) return
+    setBulkLoading(true)
+    setMessage(null)
+    try {
+      const { data } = await api.post('/user/bulk/extend-service', {
+        userIds: selectedIds,
+        days: bulkExtendDays,
+      })
+      setMessage({ type: 'success', text: data.message })
+      setSelectedIds([])
+      setShowBulkExtend(false)
+      fetchData()
+    } catch (err) {
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Error al extender' })
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.length === 0) return
+    if (!confirm(`Eliminar ${selectedIds.length} usuarios? Esta accion no se puede deshacer.`)) return
+    setBulkLoading(true)
+    setMessage(null)
+    try {
+      const { data } = await api.post('/user/bulk/delete', {
+        userIds: selectedIds,
+      })
+      setMessage({ type: 'success', text: data.message })
+      setSelectedIds([])
+      fetchData()
+    } catch (err) {
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Error al eliminar' })
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
+  const roleColors = {
+    0: 'badge-danger', 1: 'badge-info', 2: 'badge-success',
+    3: 'badge-info', 4: 'badge-warning'
+  }
   const roleLabels = { 0: 'SuperAdmin', 1: 'Admin', 2: 'Reseller', 3: 'SubReseller', 4: 'Customer' }
 
+  function isExpired(date) {
+    if (!date) return false
+    return new Date(date) < new Date()
+  }
+
+  function formatExpiry(date) {
+    if (!date) return '-'
+    return new Date(date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+
+  function formatDuration(hours) {
+    if (!hours || hours <= 0) return '-'
+    if (hours >= 24 && hours % 24 === 0) return `${hours / 24} dias`
+    return `${hours} horas`
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Mis Usuarios</h2>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 bg-primary-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span className="hidden sm:inline">Crear</span>
-        </button>
+    <div className="max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">Usuarios</h1>
+          <p className="text-sm text-[var(--text-muted)]">{users.length} usuarios registrados</p>
+        </div>
+        <div className="flex gap-2">
+          {selectedIds.length > 0 && (
+            <>
+              <span className="flex items-center text-sm text-[var(--text-secondary)] mr-1">
+                {selectedIds.length} seleccionados
+              </span>
+              <button
+                onClick={() => setShowBulkExtend(true)}
+                disabled={bulkLoading}
+                className="btn btn-secondary text-sm"
+              >
+                <PlusCircle className="w-4 h-4" />
+                Extender
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkLoading}
+                className="btn btn-secondary text-sm text-red-400 border-red-500/30 hover:bg-red-500/10"
+              >
+                <Trash2 className="w-4 h-4" />
+                Eliminar
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => setShowCreate(!showCreate)}
+            className="btn btn-primary"
+          >
+            <UserPlus className="w-4 h-4" />
+            Nuevo Usuario
+          </button>
+        </div>
       </div>
 
+      {/* Message */}
+      {message && (
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg mb-4 text-sm ${
+          message.type === 'success' ? 'bg-green-500/10 border border-green-500/30 text-green-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'
+        }`}>
+          {message.type === 'success' ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+          {message.text}
+        </div>
+      )}
+
+      {/* Bulk Extend Modal */}
+      {showBulkExtend && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="card p-6 max-w-sm w-full">
+            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Extender Servicio</h3>
+            <p className="text-sm text-[var(--text-secondary)] mb-4">
+              Extender {selectedIds.length} usuarios por:
+            </p>
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Dias</label>
+              <input
+                type="number"
+                value={bulkExtendDays}
+                onChange={(e) => setBulkExtendDays(parseInt(e.target.value) || 30)}
+                className="input"
+                min="1"
+                max="365"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleBulkExtend} disabled={bulkLoading} className="btn btn-primary flex-1">
+                {bulkLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Confirmar
+              </button>
+              <button onClick={() => setShowBulkExtend(false)} className="btn btn-secondary">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Create Form */}
-      {showForm && (
-        <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 space-y-3 transition-colors">
-          <h3 className="font-semibold text-gray-900 dark:text-white">Nuevo sub-usuario</h3>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre de usuario</label>
-            <input
-              type="text"
-              value={form.userName}
-              onChange={(e) => setForm({ ...form, userName: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-              placeholder="usuario123"
-              required
-            />
+      {showCreate && (
+        <form onSubmit={handleSubmit} className="card p-4 mb-4">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">Crear Nuevo Usuario</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Username</label>
+              <input
+                type="text"
+                value={form.userName}
+                onChange={(e) => setForm({ ...form, userName: e.target.value })}
+                className="input"
+                placeholder="usuario123"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Password</label>
+              <input
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                className="input"
+                placeholder="Minimo 6 caracteres"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Plan</label>
+              <select
+                value={form.planId}
+                onChange={(e) => setForm({ ...form, planId: e.target.value })}
+                className="input"
+                required
+              >
+                <option value="">Seleccionar plan...</option>
+                {plans.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} - {p.creditCost} credits - {p.maxDevices} disp</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Nodo (opcional)</label>
+              <select
+                value={form.nodeId}
+                onChange={(e) => setForm({ ...form, nodeId: e.target.value })}
+                className="input"
+              >
+                <option value="">Sin provisionar</option>
+                {availableNodes.map(n => (
+                  <option key={n.id} value={n.id}>{n.label} ({n.ip})</option>
+                ))}
+              </select>
+            </div>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contrasena</label>
-            <input
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-              placeholder="Minimo 6 caracteres"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rol</label>
-            <select
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-            >
-              {ROLES.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 bg-primary-600 text-white py-2.5 rounded-lg font-medium hover:bg-primary-700 disabled:bg-primary-400 transition-colors flex items-center justify-center gap-2"
-            >
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+          <div className="flex gap-2 mt-4">
+            <button type="submit" disabled={submitting} className="btn btn-primary">
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               Crear
             </button>
-            <button
-              type="button"
-              onClick={() => { setShowForm(false); setMessage(null) }}
-              className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 dark:text-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-            >
+            <button type="button" onClick={() => setShowCreate(false)} className="btn btn-secondary">
               Cancelar
             </button>
           </div>
         </form>
       )}
 
-      {message && (
-        <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm ${
-          message.type === 'success' ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-        }`}>
-          {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-          {message.text}
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="input pl-10"
+            placeholder="Buscar usuario..."
+          />
         </div>
-      )}
+        <div className="flex gap-1.5">
+          {[
+            { key: 'all', label: 'Todos' },
+            { key: 'active', label: 'Activos' },
+            { key: 'expired', label: 'Vencidos' },
+            { key: 'trial', label: 'Prueba' },
+          ].map(f => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              className={`btn btn-sm ${filter === f.key ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      {/* Users List */}
+      {/* Table */}
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
         </div>
-      ) : subusers.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-8 text-center shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
-          <UsersIcon className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-500 dark:text-gray-400">No tenes sub-usuarios aun</p>
+      ) : filteredUsers.length === 0 ? (
+        <div className="card flex flex-col items-center justify-center py-16">
+          <UsersIcon className="w-12 h-12 text-[var(--text-muted)] mb-3" />
+          <p className="text-[var(--text-muted)]">No se encontraron usuarios</p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 transition-colors">
-          {subusers.map((u) => (
-            <div key={u.id} className="px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
-                  <span className="text-primary-700 dark:text-primary-400 font-semibold text-sm">{u.userName.charAt(0).toUpperCase()}</span>
-                </div>
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">{u.userName}</p>
-                  <p className="text-xs text-gray-400">{roleLabels[u.role] || u.role}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="font-semibold text-sm text-gray-900 dark:text-white">{u.credits?.toLocaleString() ?? 0}</p>
-                <p className="text-xs text-gray-400">creditos</p>
-              </div>
-            </div>
-          ))}
+        <div className="table-container overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                <th className="w-10">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.length === filteredUsers.length && filteredUsers.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-[var(--border-color)] bg-[var(--bg-primary)] text-blue-500 focus:ring-blue-500"
+                  />
+                </th>
+                <th>Usuario</th>
+                <th>Plan / Duracion</th>
+                <th>Disp</th>
+                <th>Vencimiento</th>
+                <th>Estado</th>
+                <th>Creditos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredUsers.map(u => (
+                <tr key={u.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(u.id)}
+                      onChange={() => toggleSelect(u.id)}
+                      className="w-4 h-4 rounded border-[var(--border-color)] bg-[var(--bg-primary)] text-blue-500 focus:ring-blue-500"
+                    />
+                  </td>
+                  <td>
+                    <div className="flex items-center gap-2">
+                      <span className={`status-dot ${u.isTrial ? 'warning' : isExpired(u.serviceExpiry) ? 'offline' : 'online'}`} />
+                      <div>
+                        <p className="font-medium text-[var(--text-primary)]">{u.userName}</p>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className={`badge ${roleColors[u.role] || 'badge-warning'}`}>
+                            {roleLabels[u.role] || u.role}
+                          </span>
+                          {u.isTrial && <span className="badge badge-warning">Prueba</span>}
+                          {u.isProvisionedOnVps && (
+                            <span className="badge badge-success flex items-center gap-0.5">
+                              <Server className="w-3 h-3" /> VPS
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div>
+                      <p className="text-[var(--text-secondary)]">{u.planName || '-'}</p>
+                      {u.planDurationHours && <p className="text-xs text-[var(--text-muted)]">{formatDuration(u.planDurationHours)}</p>}
+                      {u.isTrialPlan && <span className="badge badge-warning mt-0.5">Prueba</span>}
+                    </div>
+                  </td>
+                  <td className="text-center text-[var(--text-secondary)]">{u.maxDevices || 1}</td>
+                  <td>
+                    <span className={`text-sm ${isExpired(u.serviceExpiry) ? 'text-red-400' : 'text-[var(--text-secondary)]'}`}>
+                      <Calendar className="w-3.5 h-3.5 inline mr-1" />
+                      {formatExpiry(u.serviceExpiry)}
+                    </span>
+                  </td>
+                  <td>
+                    {u.isTrial
+                      ? <span className="badge badge-warning">Trial</span>
+                      : isExpired(u.serviceExpiry)
+                        ? <span className="badge badge-danger">Vencido</span>
+                        : <span className="badge badge-success">Activo</span>
+                    }
+                  </td>
+                  <td className="font-semibold text-[var(--text-primary)]">{u.credits?.toLocaleString() ?? 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

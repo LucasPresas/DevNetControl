@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import api from '../lib/api'
-import { Server, Loader2, AlertCircle, CheckCircle, Terminal, Activity } from 'lucide-react'
+import { Server, Loader2, AlertCircle, Check, X, Terminal, Activity, ArrowLeft } from 'lucide-react'
 
 export default function NodeDetail() {
   const { id } = useParams()
@@ -72,58 +72,57 @@ export default function NodeDetail() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
       </div>
     )
   }
 
   if (!node) {
     return (
-      <div className="text-center py-12">
+      <div className="card flex flex-col items-center justify-center py-16">
         <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
-        <p className="text-gray-500 dark:text-gray-400">Nodo no encontrado</p>
+        <p className="text-[var(--text-muted)]">Nodo no encontrado</p>
+        <Link to="/nodes" className="btn btn-primary mt-4">
+          <ArrowLeft className="w-4 h-4" />
+          Volver a nodos
+        </Link>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
+    <div className="max-w-7xl mx-auto space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-12 h-12 bg-primary-100 dark:bg-primary-900/30 rounded-xl flex items-center justify-center">
-          <Server className="w-6 h-6 text-primary-600 dark:text-primary-400" />
+        <Link to="/nodes" className="p-2 rounded-lg hover:bg-[var(--bg-hover)] text-[var(--text-secondary)]">
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
+          <Server className="w-5 h-5 text-blue-500" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">{node.label}</h2>
-          <p className="text-sm text-gray-400 font-mono">{node.ip}:{node.sshPort}</p>
+          <h1 className="text-lg font-bold text-[var(--text-primary)]">{node.label}</h1>
+          <p className="text-sm text-[var(--text-muted)] font-mono">{node.ip}:{node.sshPort}</p>
         </div>
       </div>
 
       {message && (
-        <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm ${
-          message.type === 'success' ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${
+          message.type === 'success' ? 'bg-green-500/10 border border-green-500/30 text-green-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'
         }`}>
-          {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {message.type === 'success' ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
           {message.text}
         </div>
       )}
 
       {/* Actions */}
       <div className="grid grid-cols-2 gap-2">
-        <button
-          onClick={handleTestConnection}
-          disabled={actionLoading}
-          className="flex items-center justify-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 py-3 rounded-xl font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 text-gray-900 dark:text-white"
-        >
+        <button onClick={handleTestConnection} disabled={actionLoading} className="btn btn-secondary py-3">
           <Activity className="w-4 h-4" />
-          Test conexion
+          Test Conexion
         </button>
-        <button
-          onClick={handleFetchMetrics}
-          disabled={actionLoading}
-          className="flex items-center justify-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 py-3 rounded-xl font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 text-gray-900 dark:text-white"
-        >
+        <button onClick={handleFetchMetrics} disabled={actionLoading} className="btn btn-secondary py-3">
           <Activity className="w-4 h-4" />
           Metricas
         </button>
@@ -131,16 +130,16 @@ export default function NodeDetail() {
 
       {/* Metrics */}
       {metrics && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 space-y-3 transition-colors">
-          <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-            <Activity className="w-4 h-4" />
+        <div className="card p-4">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-blue-500" />
             Metricas del servidor
           </h3>
           <div className="grid grid-cols-2 gap-3">
             {Object.entries(metrics).map(([key, value]) => (
-              <div key={key} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
-                <p className="text-xs text-gray-400 uppercase tracking-wide">{key}</p>
-                <p className="font-semibold text-gray-900 dark:text-white text-sm mt-0.5">{value}</p>
+              <div key={key} className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-color)]">
+                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide">{key}</p>
+                <p className="font-semibold text-[var(--text-primary)] text-sm mt-0.5">{value}</p>
               </div>
             ))}
           </div>
@@ -148,10 +147,10 @@ export default function NodeDetail() {
       )}
 
       {/* Command Execution */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
-        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-          <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-            <Terminal className="w-4 h-4" />
+      <div className="card">
+        <div className="px-4 py-3 border-b border-[var(--border-color)]">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+            <Terminal className="w-4 h-4 text-green-500" />
             Ejecutar comando
           </h3>
         </div>
@@ -162,21 +161,17 @@ export default function NodeDetail() {
               type="text"
               value={command}
               onChange={(e) => setCommand(e.target.value)}
-              className="flex-1 px-3 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none font-mono text-sm"
+              className="input font-mono text-sm"
               placeholder="uptime"
               required
             />
-            <button
-              type="submit"
-              disabled={actionLoading}
-              className="bg-primary-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-primary-700 disabled:bg-primary-400 transition-colors flex items-center gap-2"
-            >
+            <button type="submit" disabled={actionLoading} className="btn btn-primary">
               {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ejecutar'}
             </button>
           </div>
 
           {output && (
-            <div className="bg-gray-900 text-green-400 rounded-lg p-3 font-mono text-sm whitespace-pre-wrap max-h-48 overflow-y-auto">
+            <div className="bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg p-3 font-mono text-sm text-green-400 whitespace-pre-wrap max-h-48 overflow-y-auto">
               {output}
             </div>
           )}

@@ -3,6 +3,7 @@ using System;
 using DevNetControl.Api.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260430153321_AddCreditSystemAndTrialSupport")]
+    partial class AddCreditSystemAndTrialSupport
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.7");
@@ -54,141 +57,6 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                     b.HasIndex("ToUserId");
 
                     b.ToTable("CreditTransactions");
-                });
-
-            modelBuilder.Entity("DevNetControl.Api.Domain.NodeAccess", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("NodeId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("NodeId", "UserId")
-                        .IsUnique();
-
-                    b.ToTable("NodeAccesses");
-                });
-
-            modelBuilder.Entity("DevNetControl.Api.Domain.Plan", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("CreditCost")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("DurationHours")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("MaxConnections")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("MaxDevices")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId");
-
-                    b.ToTable("Plans");
-                });
-
-            modelBuilder.Entity("DevNetControl.Api.Domain.PlanAccess", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("PlanId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("UserId1")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("UserId1");
-
-                    b.HasIndex("PlanId", "UserId")
-                        .IsUnique();
-
-                    b.ToTable("PlanAccesses");
-                });
-
-            modelBuilder.Entity("DevNetControl.Api.Domain.SessionLog", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ClientIp")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Details")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("NodeIp")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("Timestamp")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("UserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UserName")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("SessionLogs");
                 });
 
             modelBuilder.Entity("DevNetControl.Api.Domain.Tenant", b =>
@@ -241,9 +109,6 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("Credits")
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
-
                     b.Property<bool>("IsProvisionedOnVps")
                         .HasColumnType("INTEGER");
 
@@ -258,9 +123,6 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("PlanId")
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Role")
@@ -282,8 +144,6 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ParentId");
-
-                    b.HasIndex("PlanId");
 
                     b.HasIndex("TenantId");
 
@@ -353,86 +213,11 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                     b.Navigation("ToUser");
                 });
 
-            modelBuilder.Entity("DevNetControl.Api.Domain.NodeAccess", b =>
-                {
-                    b.HasOne("DevNetControl.Api.Domain.VpsNode", "Node")
-                        .WithMany("AllowedUsers")
-                        .HasForeignKey("NodeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("DevNetControl.Api.Domain.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Node");
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("DevNetControl.Api.Domain.Plan", b =>
-                {
-                    b.HasOne("DevNetControl.Api.Domain.Tenant", "Tenant")
-                        .WithMany("Plans")
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("DevNetControl.Api.Domain.PlanAccess", b =>
-                {
-                    b.HasOne("DevNetControl.Api.Domain.Plan", "Plan")
-                        .WithMany("AllowedUsers")
-                        .HasForeignKey("PlanId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("DevNetControl.Api.Domain.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("DevNetControl.Api.Domain.User", null)
-                        .WithMany("PlanAccesses")
-                        .HasForeignKey("UserId1");
-
-                    b.Navigation("Plan");
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("DevNetControl.Api.Domain.SessionLog", b =>
-                {
-                    b.HasOne("DevNetControl.Api.Domain.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DevNetControl.Api.Domain.User", "User")
-                        .WithMany("Sessions")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Tenant");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("DevNetControl.Api.Domain.User", b =>
                 {
                     b.HasOne("DevNetControl.Api.Domain.User", "Parent")
                         .WithMany("Subordinates")
                         .HasForeignKey("ParentId");
-
-                    b.HasOne("DevNetControl.Api.Domain.Plan", "Plan")
-                        .WithMany("Users")
-                        .HasForeignKey("PlanId");
 
                     b.HasOne("DevNetControl.Api.Domain.Tenant", "Tenant")
                         .WithMany("Users")
@@ -441,8 +226,6 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Parent");
-
-                    b.Navigation("Plan");
 
                     b.Navigation("Tenant");
                 });
@@ -466,17 +249,8 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("DevNetControl.Api.Domain.Plan", b =>
-                {
-                    b.Navigation("AllowedUsers");
-
-                    b.Navigation("Users");
-                });
-
             modelBuilder.Entity("DevNetControl.Api.Domain.Tenant", b =>
                 {
-                    b.Navigation("Plans");
-
                     b.Navigation("Users");
 
                     b.Navigation("VpsNodes");
@@ -486,16 +260,7 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("OwnedNodes");
 
-                    b.Navigation("PlanAccesses");
-
-                    b.Navigation("Sessions");
-
                     b.Navigation("Subordinates");
-                });
-
-            modelBuilder.Entity("DevNetControl.Api.Domain.VpsNode", b =>
-                {
-                    b.Navigation("AllowedUsers");
                 });
 #pragma warning restore 612, 618
         }

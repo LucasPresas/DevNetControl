@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import api from '../lib/api'
-import { Shield, Users, PlusCircle, Loader2, AlertCircle, CheckCircle, Wallet, Trash2 } from 'lucide-react'
+import { Shield, Users, PlusCircle, Loader2, AlertCircle, CheckCircle, Wallet, Trash2, Server, Calendar, Clock } from 'lucide-react'
 
 export default function AdminPanel() {
   const [users, setUsers] = useState([])
@@ -67,6 +67,17 @@ export default function AdminPanel() {
     2: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
     3: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400',
     4: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
+  }
+
+  function formatExpiry(date) {
+    if (!date) return ''
+    const d = new Date(date)
+    return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
+  }
+
+  function isExpired(date) {
+    if (!date) return false
+    return new Date(date) < new Date()
   }
 
   return (
@@ -170,31 +181,67 @@ export default function AdminPanel() {
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 transition-colors">
           {users.map((u) => (
-            <div key={u.id} className="px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
-                  <span className="text-primary-700 dark:text-primary-400 font-semibold text-sm">{u.userName.charAt(0).toUpperCase()}</span>
+            <div key={u.id} className="px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${u.isTrial ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-primary-100 dark:bg-primary-900/30'}`}>
+                    <span className={`font-semibold text-sm ${u.isTrial ? 'text-amber-700 dark:text-amber-400' : 'text-primary-700 dark:text-primary-400'}`}>{u.userName.charAt(0).toUpperCase()}</span>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-gray-900 dark:text-white">{u.userName}</p>
+                      {u.isTrial && (
+                        <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs rounded font-medium">
+                          <Clock className="w-3 h-3" /> Prueba
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${roleColors[u.role]}`}>
+                        {roleLabels[u.role]}
+                      </span>
+                      {u.isProvisionedOnVps && (
+                        <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs rounded font-medium">
+                          <Server className="w-3 h-3" /> VPS
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">{u.userName}</p>
-                  <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${roleColors[u.role]}`}>
-                    {roleLabels[u.role]}
-                  </span>
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <p className="font-semibold text-sm text-gray-900 dark:text-white">{u.credits?.toLocaleString() ?? 0}</p>
+                    <p className="text-xs text-gray-400">{u.subordinatesCount ?? 0} hijos</p>
+                  </div>
+                  {u.role !== 1 && u.role !== 0 && (
+                    <button
+                      onClick={() => handleDeleteUser(u.id, u.userName)}
+                      className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                      aria-label="Eliminar usuario"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="text-right">
-                  <p className="font-semibold text-sm text-gray-900 dark:text-white">{u.credits?.toLocaleString() ?? 0}</p>
-                  <p className="text-xs text-gray-400">{u.subordinatesCount ?? 0} hijos</p>
-                </div>
-                {u.role !== 1 && (
-                  <button
-                    onClick={() => handleDeleteUser(u.id, u.userName)}
-                    className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                    aria-label="Eliminar usuario"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+
+              {/* Extra info row */}
+              <div className="mt-2 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                {u.maxDevices && (
+                  <span className="flex items-center gap-1">
+                    <Server className="w-3 h-3" /> {u.maxDevices} disp.
+                  </span>
+                )}
+                {u.serviceExpiry && (
+                  <span className={`flex items-center gap-1 ${isExpired(u.serviceExpiry) ? 'text-red-500' : ''}`}>
+                    <Calendar className="w-3 h-3" />
+                    {isExpired(u.serviceExpiry) ? 'Vencido' : formatExpiry(u.serviceExpiry)}
+                  </span>
+                )}
+                {u.nodesCount > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Server className="w-3 h-3" /> {u.nodesCount} nodos
+                  </span>
                 )}
               </div>
             </div>

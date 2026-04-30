@@ -1,13 +1,22 @@
 import { useEffect, useState } from 'react'
 import api from '../lib/api'
-import { Wallet, ArrowUpRight, ArrowDownRight, Send, Clock, Loader2, AlertCircle, CheckCircle } from 'lucide-react'
+import { Wallet, ArrowUpRight, ArrowDownRight, Send, Loader2, Check, X, RefreshCw } from 'lucide-react'
+
+const TYPE_LABELS = {
+  0: { label: 'Transferencia', color: 'text-[var(--text-secondary)]' },
+  1: { label: 'Carga manual', color: 'text-green-400' },
+  2: { label: 'Creacion usuario', color: 'text-blue-400' },
+  3: { label: 'Extension servicio', color: 'text-purple-400' },
+  4: { label: 'Usuario prueba', color: 'text-amber-400' },
+  5: { label: 'Costo nodo', color: 'text-indigo-400' },
+}
 
 export default function Credits() {
   const [balance, setBalance] = useState(0)
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const [showTransfer, setShowTransfer] = useState(false)
-  const [transferForm, setTransferForm] = useState({ toUserId: '', amount: '' })
+  const [form, setForm] = useState({ toUserId: '', amount: '' })
   const [transferring, setTransferring] = useState(false)
   const [message, setMessage] = useState(null)
 
@@ -37,11 +46,11 @@ export default function Credits() {
 
     try {
       const { data } = await api.post('/credit/transfer', {
-        toUserId: transferForm.toUserId,
-        amount: parseFloat(transferForm.amount),
+        toUserId: form.toUserId,
+        amount: parseFloat(form.amount),
       })
       setMessage({ type: 'success', text: data.message })
-      setTransferForm({ toUserId: '', amount: '' })
+      setForm({ toUserId: '', amount: '' })
       setShowTransfer(false)
       fetchData()
     } catch (err) {
@@ -53,135 +62,110 @@ export default function Credits() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-bold text-gray-900 dark:text-white">Creditos</h2>
-
-      {/* Balance Card */}
-      <div className="bg-gradient-to-br from-primary-600 to-primary-800 rounded-xl p-6 text-white shadow-lg">
-        <div className="flex items-center gap-2 mb-2">
-          <Wallet className="w-5 h-5 opacity-80" />
-          <span className="text-sm opacity-80">Balance disponible</span>
+    <div className="max-w-7xl mx-auto space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">Creditos</h1>
+          <p className="text-sm text-[var(--text-muted)]">Gestion de creditos y transferencias</p>
         </div>
-        <p className="text-4xl font-bold">{balance.toLocaleString()}</p>
+        <button onClick={() => setShowTransfer(!showTransfer)} className="btn btn-primary">
+          <Send className="w-4 h-4" />
+          Transferir
+        </button>
       </div>
 
-      {/* Transfer Button */}
-      <button
-        onClick={() => setShowTransfer(!showTransfer)}
-        className="w-full flex items-center justify-center gap-2 bg-primary-600 text-white py-3 rounded-xl font-medium hover:bg-primary-700 transition-colors"
-      >
-        <Send className="w-4 h-4" />
-        Transferir creditos
-      </button>
+      {/* Balance Card */}
+      <div className="card p-6 bg-gradient-to-br from-blue-600/20 to-blue-900/10 border-blue-500/30">
+        <div className="flex items-center gap-2 mb-2">
+          <Wallet className="w-5 h-5 text-blue-400" />
+          <span className="text-sm text-[var(--text-secondary)]">Balance disponible</span>
+        </div>
+        <p className="text-3xl font-bold text-white">{balance.toLocaleString()}</p>
+        {balance <= 0 && (
+          <p className="text-sm text-red-400 mt-2">Saldo agotado - Contacta a tu administrador</p>
+        )}
+      </div>
 
       {/* Transfer Form */}
       {showTransfer && (
-        <form onSubmit={handleTransfer} className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 space-y-3 transition-colors">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">ID del destinatario</label>
-            <input
-              type="text"
-              value={transferForm.toUserId}
-              onChange={(e) => setTransferForm({ ...transferForm, toUserId: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none font-mono text-sm"
-              placeholder="uuid-del-usuario"
-              required
-            />
+        <form onSubmit={handleTransfer} className="card p-4">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">Transferir Creditos</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">ID Destinatario</label>
+              <input type="text" value={form.toUserId} onChange={(e) => setForm({ ...form, toUserId: e.target.value })} className="input font-mono text-sm" placeholder="uuid-del-usuario" required />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Monto</label>
+              <input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="input" placeholder="0" min="1" required />
+            </div>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Monto</label>
-            <input
-              type="number"
-              value={transferForm.amount}
-              onChange={(e) => setTransferForm({ ...transferForm, amount: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-              placeholder="0"
-              min="1"
-              step="1"
-              required
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={transferring}
-              className="flex-1 bg-primary-600 text-white py-2.5 rounded-lg font-medium hover:bg-primary-700 disabled:bg-primary-400 transition-colors flex items-center justify-center gap-2"
-            >
+          <div className="flex gap-2 mt-4">
+            <button type="submit" disabled={transferring} className="btn btn-primary">
               {transferring ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               Enviar
             </button>
-            <button
-              type="button"
-              onClick={() => { setShowTransfer(false); setMessage(null) }}
-              className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 dark:text-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-            >
-              Cancelar
-            </button>
+            <button type="button" onClick={() => { setShowTransfer(false); setMessage(null) }} className="btn btn-secondary">Cancelar</button>
           </div>
         </form>
       )}
 
       {message && (
-        <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm ${
-          message.type === 'success' ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${
+          message.type === 'success' ? 'bg-green-500/10 border border-green-500/30 text-green-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'
         }`}>
-          {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {message.type === 'success' ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
           {message.text}
         </div>
       )}
 
       {/* History */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
-        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-          <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-            <Clock className="w-4 h-4" />
-            Historial
-          </h3>
+      <div className="card">
+        <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Historial</h3>
+          <button onClick={fetchData} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] flex items-center gap-1">
+            <RefreshCw className="w-3 h-3" /> Actualizar
+          </button>
         </div>
 
         {history.length === 0 ? (
-          <div className="px-4 py-8 text-center text-gray-400 text-sm">
-            No hay transacciones aun
-          </div>
+          <div className="px-4 py-8 text-center text-[var(--text-muted)] text-sm">Sin transacciones</div>
         ) : (
-          <div className="divide-y divide-gray-100 dark:divide-gray-700">
-            {history.map((tx) => (
-              <div key={tx.id} className="px-4 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    tx.direction === 'Received' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
+          <div className="divide-y divide-[var(--border-color)]">
+            {history.map((tx) => {
+              const typeInfo = TYPE_LABELS[tx.type] || TYPE_LABELS[0]
+              return (
+                <div key={tx.id} className="px-4 py-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${tx.direction === 'Received' ? 'bg-green-500' : 'bg-red-500'}`} />
+                    <div>
+                      <p className="text-sm text-[var(--text-primary)]">
+                        {tx.direction === 'Received' ? tx.fromUserName : tx.toUserName}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-[var(--text-muted)]">
+                          {new Date(tx.timestamp).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <span className={`text-xs ${typeInfo.color}`}>{typeInfo.label}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <span className={`text-sm font-semibold flex items-center gap-1 ${
+                    tx.direction === 'Received' ? 'text-green-400' : 'text-red-400'
                   }`}>
-                    {tx.direction === 'Received' ? (
-                      <ArrowDownRight className="w-4 h-4 text-green-600 dark:text-green-400" />
-                    ) : (
-                      <ArrowUpRight className="w-4 h-4 text-red-600 dark:text-red-400" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {tx.direction === 'Received' ? 'De' : 'A'} {tx.direction === 'Received' ? tx.fromUserName : tx.toUserName}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {new Date(tx.timestamp).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
+                    {tx.direction === 'Received' ? <ArrowDownRight className="w-3.5 h-3.5" /> : <ArrowUpRight className="w-3.5 h-3.5" />}
+                    {tx.amount.toLocaleString()}
+                  </span>
                 </div>
-                <span className={`font-semibold text-sm ${
-                  tx.direction === 'Received' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                }`}>
-                  {tx.direction === 'Received' ? '+' : '-'}{tx.amount.toLocaleString()}
-                </span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

@@ -3,6 +3,18 @@ using System.Collections.Generic;
 
 namespace DevNetControl.Api.Domain
 {
+    public enum CreditTransactionType
+    {
+        Transfer,
+        ManualAdd,
+        UserCreationCost,
+        ServiceExtension,
+        TrialCreation,
+        NodeCreationCost,
+        PlanPurchase,
+        AdminCredit,
+    }
+
     public class CreditTransaction
     {
         public Guid Id { get; set; }
@@ -12,6 +24,7 @@ namespace DevNetControl.Api.Domain
         public decimal Amount { get; set; }
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
         public string Note { get; set; } = string.Empty;
+        public CreditTransactionType Type { get; set; }
 
         public Tenant Tenant { get; set; } = null!;
         public User FromUser { get; set; } = null!;

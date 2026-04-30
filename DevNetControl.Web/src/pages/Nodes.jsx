@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../lib/api'
-import { Server, Plus, Loader2, AlertCircle, CheckCircle, Wifi } from 'lucide-react'
+import { Server, Plus, Loader2, Check, X, Wifi, Terminal, Settings } from 'lucide-react'
 
 export default function Nodes() {
   const [nodes, setNodes] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ ip: '', sshPort: '22', label: '', password: '' })
+  const [showCreate, setShowCreate] = useState(false)
+  const [form, setForm] = useState({ label: '', ip: '', sshPort: '22', password: '' })
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState(null)
+  const [testingNode, setTestingNode] = useState(null)
 
   useEffect(() => {
     fetchNodes()
@@ -33,15 +34,15 @@ export default function Nodes() {
 
     try {
       const { data } = await api.post('/vpsnode', {
+        label: form.label,
         ip: form.ip,
         sshPort: parseInt(form.sshPort),
-        label: form.label,
         password: form.password,
         creditCost: 0,
       })
       setMessage({ type: 'success', text: data.message })
-      setForm({ ip: '', sshPort: '22', label: '', password: '' })
-      setShowForm(false)
+      setForm({ label: '', ip: '', sshPort: '22', password: '' })
+      setShowCreate(false)
       fetchNodes()
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Error al crear nodo' })
@@ -50,153 +51,137 @@ export default function Nodes() {
     }
   }
 
-  async function handleTest(id) {
+  async function handleDelete(id) {
+    if (!confirm('Eliminar este nodo?')) return
+    try {
+      await api.delete(`/vpsnode/${id}`)
+      setMessage({ type: 'success', text: 'Nodo eliminado' })
+      fetchNodes()
+    } catch (err) {
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Error al eliminar' })
+    }
+  }
+
+  async function testConnection(id) {
+    setTestingNode(id)
     try {
       const { data } = await api.post(`/vpsnode/${id}/test-connection`)
       setMessage({ type: 'success', text: data.message })
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Error de conexion' })
+    } finally {
+      setTestingNode(null)
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Nodos VPS</h2>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 bg-primary-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
-        >
+    <div className="max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">Nodos VPS</h1>
+          <p className="text-sm text-[var(--text-muted)]">{nodes.length} servidores registrados</p>
+        </div>
+        <button onClick={() => setShowCreate(!showCreate)} className="btn btn-primary">
           <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Agregar</span>
+          Nuevo Nodo
         </button>
       </div>
 
-      {/* Create Form */}
-      {showForm && (
-        <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 space-y-3 transition-colors">
-          <h3 className="font-semibold text-gray-900 dark:text-white">Nuevo nodo</h3>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Etiqueta</label>
-            <input
-              type="text"
-              value={form.label}
-              onChange={(e) => setForm({ ...form, label: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-              placeholder="VPS-Principal"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">IP</label>
-              <input
-                type="text"
-                value={form.ip}
-                onChange={(e) => setForm({ ...form, ip: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                placeholder="192.168.1.1"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Puerto</label>
-              <input
-                type="number"
-                value={form.sshPort}
-                onChange={(e) => setForm({ ...form, sshPort: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                placeholder="22"
-                required
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contrasena SSH</label>
-            <input
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-              placeholder="Contrasena root"
-              required
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 bg-primary-600 text-white py-2.5 rounded-lg font-medium hover:bg-primary-700 disabled:bg-primary-400 transition-colors flex items-center justify-center gap-2"
-            >
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-              Crear
-            </button>
-            <button
-              type="button"
-              onClick={() => { setShowForm(false); setMessage(null) }}
-              className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 dark:text-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
-        </form>
-      )}
-
       {message && (
-        <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm ${
-          message.type === 'success' ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg mb-4 text-sm ${
+          message.type === 'success' ? 'bg-green-500/10 border border-green-500/30 text-green-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'
         }`}>
-          {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {message.type === 'success' ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
           {message.text}
         </div>
       )}
 
-      {/* Nodes List */}
-      {nodes.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-8 text-center shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
-          <Server className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-500 dark:text-gray-400">No tenes nodos configurados</p>
+      {showCreate && (
+        <form onSubmit={handleSubmit} className="card p-4 mb-4">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">Agregar Nodo VPS</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Etiqueta</label>
+              <input type="text" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className="input" placeholder="VPS-USA-01" required />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">IP</label>
+              <input type="text" value={form.ip} onChange={(e) => setForm({ ...form, ip: e.target.value })} className="input" placeholder="192.168.1.1" required />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Puerto SSH</label>
+              <input type="number" value={form.sshPort} onChange={(e) => setForm({ ...form, sshPort: e.target.value })} className="input" min="1" max="65535" required />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Password Root</label>
+              <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="input" placeholder="Contraseña del servidor" required />
+            </div>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <button type="submit" disabled={submitting} className="btn btn-primary">
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Agregar
+            </button>
+            <button type="button" onClick={() => setShowCreate(false)} className="btn btn-secondary">Cancelar</button>
+          </div>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
+      ) : nodes.length === 0 ? (
+        <div className="card flex flex-col items-center justify-center py-16">
+          <Server className="w-12 h-12 text-[var(--text-muted)] mb-3" />
+          <p className="text-[var(--text-muted)]">No hay nodos registrados</p>
         </div>
       ) : (
-        <div className="grid gap-3">
-          {nodes.map((node) => (
-            <Link
-              key={node.id}
-              to={`/nodes/${node.id}`}
-              className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 hover:border-primary-200 dark:hover:border-primary-800 hover:shadow-md transition-all block"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-lg flex items-center justify-center">
-                    <Server className="w-5 h-5 text-primary-600 dark:text-primary-400" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">{node.label}</p>
-                    <p className="text-xs text-gray-400 font-mono">{node.ip}:{node.sshPort}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={(e) => { e.preventDefault(); handleTest(node.id) }}
-                  className="p-2 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
-                  aria-label="Test conexion"
-                >
-                  <Wifi className="w-4 h-4" />
-                </button>
-              </div>
-            </Link>
-          ))}
+        <div className="table-container overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Nodo</th>
+                <th>Direccion</th>
+                <th>Propietario</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {nodes.map(n => (
+                <tr key={n.id}>
+                  <td>
+                    <div className="flex items-center gap-2">
+                      <span className="status-dot online" />
+                      <div>
+                        <p className="font-medium text-[var(--text-primary)]">{n.label}</p>
+                        <p className="text-xs text-[var(--text-muted)] font-mono">{n.ip}:{n.sshPort}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="font-mono text-sm text-[var(--text-secondary)]">{n.ip}:{n.sshPort}</td>
+                  <td className="text-[var(--text-secondary)]">{n.ownerId ? 'Asignado' : '-'}</td>
+                  <td>
+                    <span className="badge badge-success">Online</span>
+                  </td>
+                  <td>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => testConnection(n.id)} disabled={testingNode === n.id} className="btn btn-sm btn-secondary">
+                        {testingNode === n.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+                        Test
+                      </button>
+                      <Link to={`/nodes/${n.id}`} className="btn btn-sm btn-secondary">
+                        <Terminal className="w-3.5 h-3.5" />
+                        Gestion
+                      </Link>
+                      <button onClick={() => handleDelete(n.id)} className="btn btn-sm btn-danger">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

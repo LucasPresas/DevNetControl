@@ -60,6 +60,8 @@ public class AuthController : ControllerBase
             Token = token,
             User = user.UserName,
             Role = user.Role.ToString(),
+            UserId = user.Id,
+            Credits = user.Credits,
             TenantId = user.TenantId,
             TenantName = tenant.Name
         });
