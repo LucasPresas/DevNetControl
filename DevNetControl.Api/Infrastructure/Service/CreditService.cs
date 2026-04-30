@@ -17,7 +17,6 @@ public class CreditService
     {
         if (amount <= 0) return (false, "El monto debe ser mayor a cero.");
 
-        // Usamos una transacción de DB para que sea todo o nada
         using var transaction = await _context.Database.BeginTransactionAsync();
 
         try
@@ -31,16 +30,12 @@ public class CreditService
             if (sender.Credits < amount)
                 return (false, "Saldo insuficiente.");
 
-            // Lógica de jerarquía (opcional pero recomendada): 
-            // Solo puedes transferir a alguien que sea tu "hijo" o si eres Admin
             if (sender.Role != UserRole.Admin && receiver.ParentId != sender.Id)
                 return (false, "No tienes permiso para transferir a este usuario.");
 
-            // Realizar movimiento
             sender.Credits -= amount;
             receiver.Credits += amount;
 
-            // Registrar la auditoría
             var audit = new CreditTransaction
             {
                 FromUserId = fromId,
@@ -61,4 +56,76 @@ public class CreditService
             return (false, $"Error interno: {ex.Message}");
         }
     }
+
+    public async Task<decimal> GetUserBalanceAsync(Guid userId)
+    {
+        var user = await _context.Users.FindAsync(userId);
+        return user?.Credits ?? 0;
+    }
+
+    public async Task<List<TransactionDto>> GetTransactionHistoryAsync(Guid userId, int limit = 50)
+    {
+        var transactions = await _context.CreditTransactions
+            .Where(t => t.FromUserId == userId || t.ToUserId == userId)
+            .OrderByDescending(t => t.Timestamp)
+            .Take(limit)
+            .Include(t => t.FromUser)
+            .Include(t => t.ToUser)
+            .Select(t => new TransactionDto(
+                t.Id,
+                t.Timestamp,
+                t.FromUserId,
+                t.ToUserId,
+                t.FromUser.UserName,
+                t.ToUser.UserName,
+                t.Amount,
+                t.FromUserId == userId ? "Sent" : "Received",
+                t.Note
+            ))
+            .ToListAsync();
+
+        return transactions;
+    }
+
+    public async Task<(bool Success, string Message)> AddCreditsAsync(Guid userId, decimal amount)
+    {
+        if (amount <= 0) return (false, "El monto debe ser mayor a cero.");
+
+        try
+        {
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return (false, "Usuario no encontrado.");
+
+            user.Credits += amount;
+
+            var audit = new CreditTransaction
+            {
+                FromUserId = userId,
+                ToUserId = userId,
+                Amount = amount,
+                Note = $"Créditos agregados manualmente: +{amount}"
+            };
+
+            _context.CreditTransactions.Add(audit);
+            await _context.SaveChangesAsync();
+
+            return (true, $"Se agregaron {amount} créditos a {user.UserName}.");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Error interno: {ex.Message}");
+        }
+    }
 }
+
+public record TransactionDto(
+    Guid Id,
+    DateTime Timestamp,
+    Guid FromUserId,
+    Guid ToUserId,
+    string FromUserName,
+    string ToUserName,
+    decimal Amount,
+    string Direction,
+    string Note
+);

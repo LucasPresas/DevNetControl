@@ -2,10 +2,14 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi.Models; // ahora sí funciona con Swashbuckle
+using Microsoft.OpenApi.Models;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using DevNetControl.Api.Infrastructure.Persistence;
 using DevNetControl.Api.Infrastructure.Security;
 using DevNetControl.Api.Infrastructure.Services;
+using DevNetControl.Api.Infrastructure.Middleware;
+using DevNetControl.Api.Validators;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +19,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
+// VALIDACIÓN CON FLUENTVALIDATION
+builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddFluentValidationClientsideAdapters();
+builder.Services.AddValidatorsFromAssemblyContaining<LoginRequestValidator>();
 
 // CONFIGURACIÓN DE SWAGGER CON JWT
 builder.Services.AddSwaggerGen(c =>
@@ -50,6 +59,8 @@ builder.Services.AddSwaggerGen(c =>
 // Servicios de Negocio y Seguridad
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<CreditService>();
+builder.Services.AddScoped<EncryptionService>();
+builder.Services.AddScoped<SshService>();
 
 // Configuración de la Base de Datos
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -65,6 +76,10 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     }
 });
 
+// Leer JWT Key desde variable de entorno o configuración
+var jwtKey = Environment.GetEnvironmentVariable("DEVNETCONTROL_JWT_KEY") 
+    ?? builder.Configuration["Jwt:Key"]!;
+
 // Configuración de Autenticación JWT
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -78,15 +93,28 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+                Encoding.UTF8.GetBytes(jwtKey)),
+            RoleClaimType = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role",
+            NameClaimType = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
         };
     });
+
+// Políticas de Autorización
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+    options.AddPolicy("ResellerOrAbove", policy => policy.RequireRole("Admin", "Reseller"));
+    options.AddPolicy("SubResellerOrAbove", policy => policy.RequireRole("Admin", "Reseller", "SubReseller"));
+});
 
 var app = builder.Build();
 
 // ==========================================
 // 2. MIDDLEWARE PIPELINE
 // ==========================================
+
+// Manejo global de errores (siempre primero)
+app.UseGlobalExceptionHandler();
 
 if (app.Environment.IsDevelopment())
 {

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using DevNetControl.Api.Infrastructure.Persistence;
@@ -57,7 +58,37 @@ public class AuthController : ControllerBase
             Role = user.Role.ToString()
         });
     }
+
+    // 3. CAMBIO DE CONTRASEÑA (Requiere autenticación)
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+    {
+        var userId = Guid.Parse(User.FindFirst("UserId")!.Value);
+        
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null) return NotFound("Usuario no encontrado");
+
+        // Verificar contraseña actual
+        if (!BC.Verify(request.CurrentPassword, user.PasswordHash))
+        {
+            return BadRequest("La contraseña actual es incorrecta");
+        }
+
+        // Validar nueva contraseña (mínimo 6 caracteres)
+        if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 6)
+        {
+            return BadRequest("La nueva contraseña debe tener al menos 6 caracteres");
+        }
+
+        // Actualizar contraseña
+        user.PasswordHash = BC.HashPassword(request.NewPassword);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { Message = "Contraseña actualizada correctamente" });
+    }
 }
 
-// El DTO (Data Transfer Object) para recibir el login
+// DTOs
 public record LoginRequest(string UserName, string Password);
+public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
