@@ -5,12 +5,13 @@ using DevNetControl.Api.Infrastructure.Persistence;
 using DevNetControl.Api.Infrastructure.Services;
 using DevNetControl.Api.Infrastructure.Security;
 using DevNetControl.Api.Domain;
-using BC = BCrypt.Net.BCrypt;
+using DevNetControl.Api.Dtos; // Importante para los nuevos DTOs centralizados
 
 namespace DevNetControl.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Policy = "AdminOnly")] // Aplicado a nivel de clase para mayor seguridad
 public class AdminController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
@@ -23,18 +24,16 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("dashboard-data")]
-    [Authorize(Policy = "AdminOnly")]
     public IActionResult GetSensitiveData()
     {
         return Ok(new {
-            Message = "Bienvenido, Admin. Datos solo visibles para administradores.",
-            ServerStatus = "All nodes operational",
-            TotalRevenue = 1500.50
+            Message = "Panel de control administrativo activo.",
+            ServerStatus = "Todos los nodos operativos",
+            TotalRevenue = 1500.50 // Este dato debería venir de un servicio de facturación a futuro
         });
     }
 
     [HttpGet("users")]
-    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetAllUsers()
     {
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
@@ -47,7 +46,7 @@ public class AdminController : ControllerBase
                 u.UserName,
                 Role = u.Role.ToString(),
                 u.Credits,
-                ParentId = u.ParentId,
+                u.ParentId,
                 SubordinatesCount = u.Subordinates.Count,
                 NodesCount = u.OwnedNodes.Count
             })
@@ -57,7 +56,6 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("users/{id}")]
-    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetUserDetail(Guid id)
     {
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
@@ -78,25 +76,27 @@ public class AdminController : ControllerBase
             user.Credits,
             Parent = user.Parent == null ? null : new { user.Parent.Id, user.Parent.UserName },
             Subordinates = user.Subordinates.Select(s => new { s.Id, s.UserName, s.Role }).ToList(),
-            Nodes = user.OwnedNodes.Select(n => new { n.Id, n.IP, n.SshPort, n.label }).ToList()
+            Nodes = user.OwnedNodes.Select(n => new { n.Id, n.IP, n.SshPort, Label = n.label })
         });
     }
 
     [HttpPut("users/{id}")]
-    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserRequest request)
     {
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
 
-        var user = await _context.Users.FindAsync(id);
-        if (user == null || user.TenantId != tenantId)
-            return NotFound(new { Message = "Usuario no encontrado" });
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
+        if (user == null)
+            return NotFound(new { Message = "Usuario no encontrado o fuera de su jurisdicción" });
 
         if (request.Role.HasValue)
             user.Role = request.Role.Value;
 
-        if (request.Credits.HasValue && request.Credits.Value >= 0)
+        if (request.Credits.HasValue)
+        {
+            if (request.Credits.Value < 0) return BadRequest(new { Message = "Los créditos no pueden ser negativos" });
             user.Credits = request.Credits.Value;
+        }
 
         await _context.SaveChangesAsync();
 
@@ -104,7 +104,6 @@ public class AdminController : ControllerBase
     }
 
     [HttpDelete("users/{id}")]
-    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeleteUser(Guid id)
     {
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
@@ -116,11 +115,12 @@ public class AdminController : ControllerBase
         if (user == null)
             return NotFound(new { Message = "Usuario no encontrado" });
 
+        // Impedir el suicidio administrativo o borrar superiores
         if (user.Role == UserRole.Admin || user.Role == UserRole.SuperAdmin)
-            return BadRequest(new { Message = "No se puede eliminar el administrador principal" });
+            return BadRequest(new { Message = "Restricción de seguridad: No se pueden eliminar cuentas administrativas de alto nivel" });
 
         if (user.Subordinates.Any())
-            return BadRequest(new { Message = "El usuario tiene subordinados. Reasignalos primero." });
+            return BadRequest(new { Message = "El usuario tiene vendedores o clientes a cargo. Debe reasignarlos antes de eliminar la cuenta." });
 
         _context.Users.Remove(user);
         await _context.SaveChangesAsync();
@@ -129,10 +129,11 @@ public class AdminController : ControllerBase
     }
 
     [HttpPost("users/{id}/add-credits")]
-    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> AddCredits(Guid id, [FromBody] AddCreditsRequest request)
     {
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        
+        // Llamada corregida para usar la nueva firma de 3 argumentos
         var result = await _creditService.AddCreditsAsync(id, request.Amount, tenantId);
 
         if (!result.Success)
@@ -141,6 +142,3 @@ public class AdminController : ControllerBase
         return Ok(new { Message = result.Message });
     }
 }
-
-public record UpdateUserRequest(UserRole? Role = null, decimal? Credits = null);
-public record AddCreditsRequest(decimal Amount);

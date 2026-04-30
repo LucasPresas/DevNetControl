@@ -1,33 +1,39 @@
-using System;
-using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
-namespace DevNetControl.Api.Domain
+namespace DevNetControl.Api.Domain;
+
+public class CreditTransaction
 {
-    public enum CreditTransactionType
-    {
-        Transfer,
-        ManualAdd,
-        UserCreationCost,
-        ServiceExtension,
-        TrialCreation,
-        NodeCreationCost,
-        PlanPurchase,
-        AdminCredit,
-    }
+    public Guid Id { get; set; }
+    
+    [Required]
+    public Guid TenantId { get; set; } 
 
-    public class CreditTransaction
-    {
-        public Guid Id { get; set; }
-        public Guid TenantId { get; set; }
-        public Guid FromUserId { get; set; }
-        public Guid ToUserId { get; set; }
-        public decimal Amount { get; set; }
-        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
-        public string Note { get; set; } = string.Empty;
-        public CreditTransactionType Type { get; set; }
+    [Required]
+    public Guid SourceUserId { get; set; } 
+    public User SourceUser { get; set; } = null!;
 
-        public Tenant Tenant { get; set; } = null!;
-        public User FromUser { get; set; } = null!;
-        public User ToUser { get; set; } = null!;
-    }
+    public Guid? TargetUserId { get; set; } 
+    public User? TargetUser { get; set; }
+
+    [Required]
+    public decimal Amount { get; set; }
+
+    [Required]
+    public CreditTransactionType Type { get; set; }
+
+    public string? Note { get; set; } 
+
+    [Required]
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public enum CreditTransactionType
+{
+    Transfer,
+    UserCreation,     
+    ServiceExtension, 
+    PlanPurchase,     
+    AdminCredit,      
+    Refund
 }

@@ -41,5 +41,6 @@ public class ApplicationDbContext : DbContext
         
         modelBuilder.Entity<NodeAccess>().HasQueryFilter(e => !hasTenant || e.Node.TenantId == tenantId);
         modelBuilder.Entity<PlanAccess>().HasQueryFilter(e => !hasTenant || e.Plan.TenantId == tenantId);
+ 
     }
 }
