@@ -10,7 +10,43 @@ namespace DevNetControl.Api.Infrastructure.Persistence
         {
             await context.Database.EnsureCreatedAsync();
 
-            if (await context.Tenants.AnyAsync()) return;
+            // Crear Tenant especial para SuperAdmin si no existe
+            var superAdminTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+            var platformTenant = await context.Tenants.FindAsync(superAdminTenantId);
+            
+            if (platformTenant == null)
+            {
+                platformTenant = new Tenant
+                {
+                    Id = superAdminTenantId,
+                    Name = "Platform",
+                    Subdomain = "platform",
+                    AdminEmail = "platform@devnetcontrol.com",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                context.Tenants.Add(platformTenant);
+                await context.SaveChangesAsync();
+            }
+
+            // Crear SuperAdmin si no existe
+            if (!await context.Users.AnyAsync(u => u.Role == UserRole.SuperAdmin))
+            {
+                var superAdmin = new User
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = superAdminTenantId,
+                    UserName = "superadmin",
+                    PasswordHash = BC.HashPassword("superadmin123"),
+                    Role = UserRole.SuperAdmin,
+                    Credits = 9999999
+                };
+
+                context.Users.Add(superAdmin);
+                await context.SaveChangesAsync();
+            }
+
+            if (await context.Tenants.CountAsync() > 1) return;
 
             var defaultTenant = new Tenant
             {

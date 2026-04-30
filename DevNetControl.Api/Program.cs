@@ -1,4 +1,6 @@
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
@@ -13,7 +15,12 @@ using DevNetControl.Api.Validators;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+    });
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddFluentValidationAutoValidation();
@@ -57,18 +64,6 @@ builder.Services.AddScoped<SshService>();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-{
-    if (connectionString != null && connectionString.Contains("Data Source"))
-    {
-        options.UseSqlite(connectionString);
-    }
-    else
-    {
-        options.UseNpgsql(connectionString);
-    }
-});
-
-builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
 {
     if (connectionString != null && connectionString.Contains("Data Source"))
     {

@@ -42,12 +42,16 @@ export default function Users() {
         password: form.password,
         role: parseInt(form.role),
       })
-      setMessage({ type: 'success', text: data.message })
+      setMessage({ type: 'success', text: data.message || 'Usuario creado correctamente' })
       setForm({ userName: '', password: '', role: '4' })
       setShowForm(false)
       fetchSubusers()
     } catch (err) {
-      setMessage({ type: 'error', text: err.response?.data || 'Error al crear usuario' })
+      const errorMessage = typeof err.response?.data === 'string' 
+        ? err.response?.data 
+        : err.response?.data?.message || err.message || 'Error al crear usuario'
+      setMessage({ type: 'error', text: errorMessage })
+      console.error('Error:', err)
     } finally {
       setSubmitting(false)
     }

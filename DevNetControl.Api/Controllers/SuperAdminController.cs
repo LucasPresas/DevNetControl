@@ -9,7 +9,7 @@ using BC = BCrypt.Net.BCrypt;
 namespace DevNetControl.Api.Controllers;
 
 [ApiController]
-[Route("api/[superadmin]")]
+[Route("api/superadmin")]
 [Authorize(Policy = "SuperAdminOnly")]
 public class SuperAdminController : ControllerBase
 {

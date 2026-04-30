@@ -7,6 +7,7 @@ import Users from './pages/Users'
 import Credits from './pages/Credits'
 import Nodes from './pages/Nodes'
 import AdminPanel from './pages/AdminPanel'
+import SuperAdminPanel from './pages/SuperAdminPanel'
 import NodeDetail from './pages/NodeDetail'
 
 function ProtectedRoute({ children, roles }) {
@@ -46,6 +47,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={['Admin']}>
               <AdminPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="superadmin"
+          element={
+            <ProtectedRoute roles={['SuperAdmin']}>
+              <SuperAdminPanel />
             </ProtectedRoute>
           }
         />

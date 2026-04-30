@@ -13,7 +13,8 @@ const navItems = [
 export default function Layout() {
   const { user, logout } = useAuthStore()
   const { isDark, toggle } = useDarkMode()
-  const isAdmin = user?.role === 'Admin' || user?.role === 'SuperAdmin'
+  const isSuperAdmin = user?.role === 'SuperAdmin'
+  const isAdmin = user?.role === 'Admin'
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col transition-colors duration-200">
@@ -80,7 +81,22 @@ export default function Layout() {
               }
             >
               <Shield className="w-5 h-5" />
-              Admin
+              Admin Panel
+            </NavLink>
+          )}
+          {isSuperAdmin && (
+            <NavLink
+              to="/superadmin"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`
+              }
+            >
+              <Shield className="w-5 h-5" />
+              Super Admin
             </NavLink>
           )}
         </nav>
@@ -117,6 +133,21 @@ export default function Layout() {
           >
             <Shield className="w-5 h-5" />
             <span className="text-[10px] font-medium truncate">Admin</span>
+          </NavLink>
+        )}
+        {isSuperAdmin && (
+          <NavLink
+            to="/superadmin"
+            className={({ isActive }) =>
+              `flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg transition-colors min-w-0 ${
+                isActive
+                  ? 'text-purple-600 dark:text-purple-400'
+                  : 'text-gray-400'
+              }`
+            }
+          >
+            <Shield className="w-5 h-5" />
+            <span className="text-[10px] font-medium truncate">Super</span>
           </NavLink>
         )}
       </nav>

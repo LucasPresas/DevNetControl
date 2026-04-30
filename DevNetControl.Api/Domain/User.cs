@@ -20,6 +20,8 @@ namespace DevNetControl.Api.Domain
         public string PasswordHash { get; set; } = string.Empty;
         public UserRole Role { get; set; }
         public decimal Credits { get; set; } = 0;
+        public int MaxDevices { get; set; } = 1;
+        public DateTime? ServiceExpiry { get; set; }
 
         public Guid? ParentId { get; set; }
         public User? Parent { get; set; }
