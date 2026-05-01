@@ -15,14 +15,24 @@ public record CreditTransactionDto(Guid Id, string SourceUserName, string? Targe
 // Planes
 public record CreatePlanRequest(string Name, int DurationHours, decimal CreditCost, int MaxConnections, int MaxDevices);
 public record UpdatePlanRequest(string? Name, int? DurationHours, decimal? CreditCost);
-public record ExtendServiceRequest(int Days);
+public record ExtendServiceRequest(int Days, Guid NodeId);
 
 // Usuarios
-public record CreateUserRequest(string UserName, string Password, Guid PlanId);
+public record CreateUserRequest(string UserName, string Password, Guid PlanId, Guid? NodeId = null);
 public record UpdateUserRequest(decimal? Credits, DevNetControl.Api.Domain.UserRole? Role);
+public record RemoveFromVpsRequest(Guid NodeId);
 
 // Infraestructura
 public record CreateNodeRequest(string IP, int SshPort, string Label, string Password, decimal CreditCost);
 public record UpdateNodeRequest(string? IP, int? SshPort, string? Label, string? Password);
 public record ExecuteCommandRequest(string Command);
 public record GrantNodeAccessRequest(Guid UserId, Guid NodeId);
+
+// Session Logs
+public record CreateSessionLogRequest(string Action, string Details, string? NodeIp = null);
+public record SessionLogDto(Guid Id, Guid? UserId, string UserName, string ClientIp, string NodeIp, string Action, string Details, DateTime Timestamp);
+
+// Hierarchy & Resellers
+public record HierarchyNodeDto(Guid Id, string UserName, DevNetControl.Api.Domain.UserRole Role, decimal Credits, List<HierarchyNodeDto> Children);
+public record CreateResellerRequest(string UserName, string Password, List<Guid> PlanIds, bool IsSubReseller = false, decimal InitialCredits = 0);
+public record LoadCreditsRequest(decimal Amount);

@@ -73,6 +73,69 @@ namespace DevNetControl.Api.Infrastructure.Persistence
 
             context.Users.Add(admin);
             await context.SaveChangesAsync();
+
+            // Crear planes por defecto si no existen
+            if (!await context.Plans.AnyAsync(p => p.TenantId == defaultTenant.Id))
+            {
+                var plans = new List<Plan>
+                {
+                    new Plan
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = defaultTenant.Id,
+                        Name = "Basic",
+                        Description = "Plan básico para pruebas",
+                        DurationHours = 720,  // 30 días
+                        CreditCost = 100,
+                        MaxConnections = 1,
+                        MaxDevices = 1,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    },
+                    new Plan
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = defaultTenant.Id,
+                        Name = "Pro",
+                        Description = "Plan profesional",
+                        DurationHours = 720,  // 30 días
+                        CreditCost = 250,
+                        MaxConnections = 5,
+                        MaxDevices = 3,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    },
+                    new Plan
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = defaultTenant.Id,
+                        Name = "Enterprise",
+                        Description = "Plan empresarial",
+                        DurationHours = 720,  // 30 días
+                        CreditCost = 500,
+                        MaxConnections = 20,
+                        MaxDevices = 10,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    },
+                    new Plan
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = defaultTenant.Id,
+                        Name = "Trial",
+                        Description = "Plan de prueba gratuito",
+                        DurationHours = 168,  // 7 días
+                        CreditCost = 0,  // Gratis
+                        MaxConnections = 1,
+                        MaxDevices = 1,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    }
+                };
+                
+                context.Plans.AddRange(plans);
+                await context.SaveChangesAsync();
+            }
         }
     }
 }

@@ -11,6 +11,7 @@ using DevNetControl.Api.Infrastructure.Persistence;
 using DevNetControl.Api.Infrastructure.Security;
 using DevNetControl.Api.Infrastructure.Services;
 using DevNetControl.Api.Infrastructure.Middleware;
+using DevNetControl.Api.Infrastructure.RateLimiting;
 using DevNetControl.Api.Validators;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -65,6 +66,9 @@ builder.Services.AddScoped<SshUserManager>();
 builder.Services.AddScoped<UserProvisioningService>();
 builder.Services.AddHostedService<UserExpirationBackgroundService>();
 
+// Rate Limiting
+builder.Services.AddRateLimiting();
+
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
@@ -110,6 +114,12 @@ builder.Services.AddAuthorization(options =>
 var app = builder.Build();
 
 app.UseGlobalExceptionHandler();
+
+// Configurar Rate Limiting
+var rateLimitService = app.Services.GetRequiredService<RateLimitService>();
+rateLimitService.ConfigureDefaultPolicies();
+app.UseRateLimit();
+app.UseRateLimitCleanup(app.Services);
 
 if (app.Environment.IsDevelopment())
 {

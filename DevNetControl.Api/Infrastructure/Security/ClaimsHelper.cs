@@ -19,6 +19,11 @@ public static class ClaimsHelper
         return user.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
     }
 
+    public static string GetCurrentUserName(ClaimsPrincipal user)
+    {
+        return user.FindFirst(ClaimTypes.Name)?.Value ?? user.FindFirst("UserName")?.Value ?? "Unknown";
+    }
+
     public static bool IsSuperAdmin(ClaimsPrincipal user)
     {
         return GetCurrentRole(user) == "SuperAdmin";

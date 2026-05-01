@@ -103,6 +103,7 @@ public class CreatePlanRequestValidator : AbstractValidator<CreatePlanRequest>
         RuleFor(x => x.DurationHours).InclusiveBetween(1, 87600).WithMessage("Duración inválida.");
         RuleFor(x => x.CreditCost).GreaterThanOrEqualTo(0).WithMessage("Costo no puede ser negativo.");
         RuleFor(x => x.MaxConnections).InclusiveBetween(1, 100).WithMessage("Máximo 100 conexiones.");
+        RuleFor(x => x.MaxDevices).InclusiveBetween(1, 100).WithMessage("Máximo 100 dispositivos.");
     }
 }
 
@@ -111,6 +112,7 @@ public class ExtendServiceRequestValidator : AbstractValidator<ExtendServiceRequ
     public ExtendServiceRequestValidator()
     {
         RuleFor(x => x.Days).InclusiveBetween(1, 365).WithMessage("Rango permitido: 1 a 365 días.");
+        RuleFor(x => x.NodeId).NotEmpty().WithMessage("ID de nodo obligatorio.");
     }
 }
 
@@ -155,6 +157,7 @@ public class CreateUserRequestValidator : AbstractValidator<CreateUserRequest>
         RuleFor(x => x.UserName).UserNameRules();
         RuleFor(x => x.Password).PasswordRules();
         RuleFor(x => x.PlanId).NotEmpty().WithMessage("Debe seleccionar un plan.");
+        RuleFor(x => x.NodeId).NotEmpty().When(x => x.NodeId.HasValue).WithMessage("ID de nodo inválido.");
     }
 }
 
@@ -164,6 +167,104 @@ public class UpdateUserRequestValidator : AbstractValidator<UpdateUserRequest>
     {
         RuleFor(x => x.Credits).GreaterThanOrEqualTo(0).When(x => x.Credits.HasValue);
         RuleFor(x => x.Role).IsInEnum().When(x => x.Role.HasValue);
+    }
+}
+
+public class RemoveFromVpsRequestValidator : AbstractValidator<RemoveFromVpsRequest>
+{
+    public RemoveFromVpsRequestValidator()
+    {
+        RuleFor(x => x.NodeId).NotEmpty().WithMessage("ID de nodo obligatorio.");
+    }
+}
+
+#endregion
+
+#region Node Management
+
+public class UpdateNodeRequestValidator : AbstractValidator<UpdateNodeRequest>
+{
+    public UpdateNodeRequestValidator()
+    {
+        RuleFor(x => x.IP)
+            .Matches(@"^(\d{1,3}\.){3}\d{1,3}$").WithMessage("Formato de IP inválido.")
+            .When(x => !string.IsNullOrEmpty(x.IP));
+        
+        RuleFor(x => x.SshPort).InclusiveBetween(1, 65535).WithMessage("Puerto fuera de rango.")
+            .When(x => x.SshPort.HasValue);
+        
+        RuleFor(x => x.Label).MaximumLength(100).WithMessage("Etiqueta máximo 100 caracteres.")
+            .When(x => !string.IsNullOrEmpty(x.Label));
+        
+        RuleFor(x => x.Password).MinimumLength(4).WithMessage("Contraseña muy corta.")
+            .When(x => !string.IsNullOrEmpty(x.Password));
+    }
+}
+
+public class GrantNodeAccessRequestValidator : AbstractValidator<GrantNodeAccessRequest>
+{
+    public GrantNodeAccessRequestValidator()
+    {
+        RuleFor(x => x.UserId).NotEmpty().WithMessage("ID de usuario obligatorio.");
+        RuleFor(x => x.NodeId).NotEmpty().WithMessage("ID de nodo obligatorio.");
+    }
+}
+
+#endregion
+
+#region Plans
+
+public class UpdatePlanRequestValidator : AbstractValidator<UpdatePlanRequest>
+{
+    public UpdatePlanRequestValidator()
+    {
+        RuleFor(x => x.Name).MaximumLength(100).WithMessage("Nombre máximo 100 caracteres.")
+            .When(x => !string.IsNullOrEmpty(x.Name));
+        
+        RuleFor(x => x.DurationHours).InclusiveBetween(1, 87600).WithMessage("Duración inválida.")
+            .When(x => x.DurationHours.HasValue);
+        
+        RuleFor(x => x.CreditCost).GreaterThanOrEqualTo(0).WithMessage("Costo no puede ser negativo.")
+            .When(x => x.CreditCost.HasValue);
+    }
+}
+
+#endregion
+
+#region Session Logs
+
+public class CreateSessionLogRequestValidator : AbstractValidator<CreateSessionLogRequest>
+{
+    public CreateSessionLogRequestValidator()
+    {
+        RuleFor(x => x.Action).NotEmpty().MaximumLength(100).WithMessage("Acción requerida.");
+        RuleFor(x => x.Details).NotEmpty().MaximumLength(1000).WithMessage("Detalles requeridos.");
+        RuleFor(x => x.NodeIp)
+            .Matches(@"^(\d{1,3}\.){3}\d{1,3}$").WithMessage("Formato de IP inválido.")
+            .When(x => !string.IsNullOrEmpty(x.NodeIp));
+    }
+}
+
+#endregion
+
+#region Resellers & Credits
+
+public class CreateResellerRequestValidator : AbstractValidator<CreateResellerRequest>
+{
+    public CreateResellerRequestValidator()
+    {
+        RuleFor(x => x.UserName).UserNameRules();
+        RuleFor(x => x.Password).PasswordRules();
+        RuleFor(x => x.PlanIds).NotEmpty().WithMessage("Debe seleccionar al menos un plan.");
+        RuleFor(x => x.InitialCredits).GreaterThanOrEqualTo(0).WithMessage("Créditos iniciales no pueden ser negativos.");
+    }
+}
+
+public class LoadCreditsRequestValidator : AbstractValidator<LoadCreditsRequest>
+{
+    public LoadCreditsRequestValidator()
+    {
+        RuleFor(x => x.Amount).GreaterThan(0).WithMessage("El monto debe ser mayor a 0.");
     }
 }
 

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using DevNetControl.Api.Infrastructure.Persistence;
 using DevNetControl.Api.Infrastructure.Security;
+using DevNetControl.Api.Infrastructure.RateLimiting;
 using DevNetControl.Api.Domain;
 using BC = BCrypt.Net.BCrypt;
 
