@@ -21,6 +21,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<SessionLog> SessionLogs { get; set; }
     public DbSet<NodeAccess> NodeAccesses { get; set; }
     public DbSet<PlanAccess> PlanAccesses { get; set; }
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
+    public DbSet<AuditLog> AuditLogs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,6 +43,19 @@ public class ApplicationDbContext : DbContext
         
         modelBuilder.Entity<NodeAccess>().HasQueryFilter(e => !hasTenant || e.Node.TenantId == tenantId);
         modelBuilder.Entity<PlanAccess>().HasQueryFilter(e => !hasTenant || e.Plan.TenantId == tenantId);
- 
+        
+        modelBuilder.Entity<RefreshToken>()
+            .HasOne(rt => rt.User)
+            .WithMany()
+            .HasForeignKey(rt => rt.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<AuditLog>()
+            .HasOne(al => al.User)
+            .WithMany()
+            .HasForeignKey(al => al.UserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<AuditLog>().HasQueryFilter(e => !hasTenant || e.TenantId == tenantId);
     }
 }

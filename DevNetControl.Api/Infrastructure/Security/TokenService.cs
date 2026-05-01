@@ -15,7 +15,7 @@ public class TokenService
         _config = config;
     }
 
-    public string GenerateToken(User user)
+    public (string AccessToken, string RefreshToken) GenerateTokens(User user)
     {
         var claims = new List<Claim>
         {
@@ -32,10 +32,13 @@ public class TokenService
             issuer: _config["Jwt:Issuer"],
             audience: _config["Jwt:Audience"],
             claims: claims,
-            expires: DateTime.Now.AddHours(8),
+            expires: DateTime.Now.AddMinutes(15), // Access token corto
             signingCredentials: creds
         );
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        var accessToken = new JwtSecurityTokenHandler().WriteToken(token);
+        var refreshToken = Convert.ToBase64String(Guid.NewGuid().ToByteArray());
+
+        return (accessToken, refreshToken);
     }
 }

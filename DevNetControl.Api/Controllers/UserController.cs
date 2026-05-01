@@ -5,6 +5,7 @@ using DevNetControl.Api.Infrastructure.Persistence;
 using DevNetControl.Api.Domain;
 using DevNetControl.Api.Infrastructure.Security;
 using DevNetControl.Api.Infrastructure.Services;
+using DevNetControl.Api.Infrastructure.RateLimiting;
 using DevNetControl.Api.Dtos;
 using BC = BCrypt.Net.BCrypt;
 
@@ -18,20 +19,24 @@ public class UserController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly UserProvisioningService _provisioningService;
     private readonly CreditService _creditService;
+    private readonly AuditService _auditService;
 
     public UserController(ApplicationDbContext context, 
                           UserProvisioningService provisioningService,
-                          CreditService creditService)
+                          CreditService creditService,
+                          AuditService auditService)
     {
         _context = context;
         _provisioningService = provisioningService;
         _creditService = creditService;
+        _auditService = auditService;
     }
 
     #region Gestión de Usuarios y VPS
 
     [HttpPost("create")]
     [Authorize(Policy = "SubResellerOrAbove")]
+    [RateLimit("user-create")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
     {
         var parentId = ClaimsHelper.GetCurrentUserId(User);
@@ -42,6 +47,11 @@ public class UserController : ControllerBase
 
         if (!result.Success)
             return BadRequest(new { Message = result.Message });
+
+        // Auditar creación de usuario
+        await _auditService.LogAsync("UserCreated", 
+            $"Usuario creado: {request.UserName} por {User.Identity?.Name}", 
+            ClaimsHelper.GetCurrentUserId(User), ClaimsHelper.GetCurrentTenantId(User));
 
         return Ok(new { Message = result.Message, UserId = result.UserId });
     }
@@ -137,6 +147,7 @@ public class UserController : ControllerBase
 
     [HttpPost("create-reseller")]
     [Authorize(Policy = "AdminOnly")]
+    [RateLimit("user-create")]
     public async Task<IActionResult> CreateReseller([FromBody] CreateResellerRequest request)
     {
         var adminId = ClaimsHelper.GetCurrentUserId(User);
@@ -150,6 +161,7 @@ public class UserController : ControllerBase
         decimal totalCost = plans.Sum(p => p.CreditCost);
 
         var admin = await _context.Users.FindAsync(adminId);
+        if (admin == null) return NotFound("Admin no encontrado.");
         if (admin.Credits < totalCost) return BadRequest("Créditos insuficientes para asignar estos planes.");
 
         var reseller = new User {
@@ -181,6 +193,12 @@ public class UserController : ControllerBase
         }
 
         await _context.SaveChangesAsync();
+
+        // Auditar creación de reseller
+        await _auditService.LogAsync("ResellerCreated", 
+            $"Reseller creado: {request.UserName} por {User.Identity?.Name}", 
+            ClaimsHelper.GetCurrentUserId(User), ClaimsHelper.GetCurrentTenantId(User));
+
         return Ok(new { Message = "Reseller creado", UserId = reseller.Id });
     }
 
@@ -199,10 +217,10 @@ public class UserController : ControllerBase
 
     #region Helpers Privados
 
-    private async Task<HierarchyNodeDto> BuildHierarchyTreeAsync(Guid userId)
+    private async Task<HierarchyNodeDto?> BuildHierarchyTreeAsync(Guid userId)
     {
         var user = await _context.Users
-            .Select(u => new { u.Id, u.UserName, Role = u.Role.ToString(), u.Credits, u.ParentId })
+            .Select(u => new { u.Id, u.UserName, u.Role, u.Credits, u.ParentId })
             .FirstOrDefaultAsync(u => u.Id == userId);
 
         if (user == null) return null;
@@ -216,7 +234,7 @@ public class UserController : ControllerBase
     {
         var subs = await _context.Users
             .Where(u => u.ParentId == parentId)
-            .Select(u => new { u.Id, u.UserName, Role = u.Role.ToString(), u.Credits })
+            .Select(u => new { u.Id, u.UserName, u.Role, u.Credits })
             .ToListAsync();
 
         var nodes = new List<HierarchyNodeDto>();

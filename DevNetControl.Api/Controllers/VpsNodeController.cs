@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using DevNetControl.Api.Infrastructure.Persistence;
 using DevNetControl.Api.Infrastructure.Services;
 using DevNetControl.Api.Infrastructure.Security;
+using DevNetControl.Api.Infrastructure.RateLimiting;
 using DevNetControl.Api.Domain;
 
 namespace DevNetControl.Api.Controllers;
@@ -164,6 +165,7 @@ public class VpsNodeController : ControllerBase
 
     [HttpPost("{id}/execute")]
     [Authorize(Policy = "ResellerOrAbove")]
+    [RateLimit("vps-execute")]
     public async Task<IActionResult> ExecuteCommand(Guid id, [FromBody] ExecuteCommandRequest request)
     {
         var userId = ClaimsHelper.GetCurrentUserId(User);

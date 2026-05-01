@@ -58,12 +58,15 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+builder.Services.AddHttpContextAccessor(); // Para AuditService
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<CreditService>();
 builder.Services.AddScoped<EncryptionService>();
 builder.Services.AddScoped<SshService>();
 builder.Services.AddScoped<SshUserManager>();
+builder.Services.AddScoped<SshSanitizerService>();
 builder.Services.AddScoped<UserProvisioningService>();
+builder.Services.AddScoped<AuditService>();
 builder.Services.AddHostedService<UserExpirationBackgroundService>();
 
 // Rate Limiting
@@ -111,6 +114,14 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("SubResellerOrAbove", policy => policy.RequireRole("SuperAdmin", "Admin", "Reseller", "SubReseller"));
 });
 
+// HSTS en producción (1 año)
+builder.Services.AddHsts(options =>
+{
+    options.MaxAge = TimeSpan.FromDays(365);
+    options.IncludeSubDomains = true;
+    options.Preload = true;
+});
+
 var app = builder.Build();
 
 app.UseGlobalExceptionHandler();
@@ -125,9 +136,14 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.UseHttpsRedirection(); // Para pruebas en dev
 }
-
-app.UseHttpsRedirection();
+else
+{
+    // Enforce HTTPS en producción
+    app.UseHttpsRedirection();
+    app.UseHsts(); // HSTS configurado en services
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

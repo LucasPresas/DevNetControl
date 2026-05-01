@@ -6,6 +6,7 @@ namespace DevNetControl.Api.Dtos;
 public record LoginRequest(string UserName, string Password);
 public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public record UpdateMyUserRequest(string? UserName, string? Password);
+public record RefreshTokenRequest(string AccessToken, string RefreshToken);
 
 // Créditos y Auditoría
 public record TransferRequest(Guid ToUserId, decimal Amount);

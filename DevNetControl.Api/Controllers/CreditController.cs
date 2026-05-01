@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using DevNetControl.Api.Infrastructure.Services;
 using DevNetControl.Api.Infrastructure.Security;
+using DevNetControl.Api.Infrastructure.RateLimiting;
 using DevNetControl.Api.Dtos;
 
 namespace DevNetControl.Api.Controllers;
@@ -16,6 +17,7 @@ public class CreditController : ControllerBase
     public CreditController(CreditService creditService) => _creditService = creditService;
 
     [HttpPost("transfer")]
+    [RateLimit("credit-transfer")]
     public async Task<IActionResult> Transfer([FromBody] TransferRequest request)
     {
         var sourceId = ClaimsHelper.GetCurrentUserId(User);

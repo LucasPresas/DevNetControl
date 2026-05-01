@@ -6,16 +6,18 @@ using System.Text.RegularExpressions;
 
 namespace DevNetControl.Api.Infrastructure.Services;
 
-public class SshService
-{
-    private readonly ApplicationDbContext _context;
-    private readonly EncryptionService _encryption;
-
-    public SshService(ApplicationDbContext context, EncryptionService encryption)
+    public class SshService
     {
-        _context = context;
-        _encryption = encryption;
-    }
+        private readonly ApplicationDbContext _context;
+        private readonly EncryptionService _encryption;
+        private readonly SshSanitizerService _sanitizer;
+
+        public SshService(ApplicationDbContext context, EncryptionService encryption, SshSanitizerService sanitizer)
+        {
+            _context = context;
+            _encryption = encryption;
+            _sanitizer = sanitizer;
+        }
 
     // FIX CS1061: GetActiveSessionsAsync para el MonitorController
     public async Task<(int Count, List<int> Pids)> GetActiveSessionsAsync(Guid nodeId, string username)
@@ -76,7 +78,15 @@ public class SshService
 
     public async Task<(bool Success, string Output, string Error)> ExecuteCommandAsync(Guid nodeId, string command)
     {
-        if (Regex.IsMatch(command, @"[;`&|]")) return (false, "", "Comando no seguro.");
+        // Sanitización de entrada
+        try 
+        {
+            _sanitizer.ValidateStrict(command);
+        }
+        catch (ArgumentException ex)
+        {
+            return (false, "", ex.Message);
+        }
 
         var (client, error) = await GetConnectedClientAsync(nodeId);
         if (client == null) return (false, "", error ?? "Error de conexión.");

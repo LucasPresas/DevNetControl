@@ -200,11 +200,11 @@ Migraciones existentes:
 - [x] **Manejo de errores**: Completar GlobalExceptionHandler.cs (middleware global)
 
 ### Seguridad
-- [ ] Rate limiting en endpoints sensibles (login, creación de usuarios)
-- [ ] Refresh token mechanism para JWT
-- [ ] HTTPS enforcement en producción
-- [ ] Sanitización de inputs en comandos SSH
-- [ ] Logging de auditoría para acciones administrativas
+- [x] Rate limiting en endpoints sensibles (login, creación de usuarios)
+- [x] Refresh token mechanism para JWT
+- [x] HTTPS enforcement en producción
+- [x] Sanitización de inputs en comandos SSH
+- [x] Logging de auditoría para acciones administrativas
 
 ### Funcionalidad
 - [ ] **Notificaciones**: Alertas de crédito bajo, expiración cercana

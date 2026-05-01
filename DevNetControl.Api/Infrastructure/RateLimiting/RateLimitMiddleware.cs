@@ -30,14 +30,14 @@ public class RateLimitMiddleware
                 context,
                 context.User);
 
-            // Agregar headers informativos
-            context.Response.Headers.Add("X-RateLimit-Limit", rateLimitAttribute.MaxRequests?.ToString() ?? "N/A");
-            context.Response.Headers.Add("X-RateLimit-Remaining", result.RequestsRemaining.ToString());
+            // Agregar headers informativos (usando Append para evitar excepciones de clave duplicada)
+            context.Response.Headers.Append("X-RateLimit-Limit", rateLimitAttribute.MaxRequests?.ToString() ?? "N/A");
+            context.Response.Headers.Append("X-RateLimit-Remaining", result.RequestsRemaining.ToString());
             
             if (!result.IsAllowed)
             {
-                context.Response.Headers.Add("X-RateLimit-Reset", ((int)DateTimeOffset.UtcNow.AddSeconds(result.RetryAfterSeconds).ToUnixTimeSeconds()).ToString());
-                context.Response.Headers.Add("Retry-After", result.RetryAfterSeconds.ToString());
+                context.Response.Headers.Append("X-RateLimit-Reset", ((int)DateTimeOffset.UtcNow.AddSeconds(result.RetryAfterSeconds).ToUnixTimeSeconds()).ToString());
+                context.Response.Headers.Append("Retry-After", result.RetryAfterSeconds.ToString());
 
                 context.Response.StatusCode = (int)HttpStatusCode.TooManyRequests;
                 context.Response.ContentType = "application/json";
