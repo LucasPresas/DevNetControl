@@ -16,20 +16,46 @@ public class AdminController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly CreditService _creditService;
+    private readonly NotificationService _notificationService;
 
-    public AdminController(ApplicationDbContext context, CreditService creditService)
+    public AdminController(ApplicationDbContext context, CreditService creditService, NotificationService notificationService)
     {
         _context = context;
         _creditService = creditService;
+        _notificationService = notificationService;
     }
 
     [HttpGet("dashboard-data")]
-    public IActionResult GetSensitiveData()
+    public async Task<IActionResult> GetDashboardData()
     {
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var currentUserId = ClaimsHelper.GetCurrentUserId(User);
+
+        // Conteos por rol (dentro del tenant)
+        var userStats = await _context.Users
+            .Where(u => u.TenantId == tenantId)
+            .GroupBy(u => u.Role)
+            .Select(g => new { Role = g.Key.ToString(), Count = g.Count() })
+            .ToListAsync();
+
+        // Total créditos en el tenant
+        var totalCredits = await _context.Users
+            .Where(u => u.TenantId == tenantId)
+            .SumAsync(u => u.Credits);
+
+        // Notificaciones sin leer para el admin
+        var unreadNotifications = await _notificationService.GetUserNotificationsAsync(currentUserId, unreadOnly: true);
+
+        // Nodos VPS en el tenant
+        var nodesCount = await _context.VpsNodes
+            .CountAsync(n => n.TenantId == tenantId || n.TenantId == Guid.Empty);
+
         return Ok(new {
-            Message = "Panel de control administrativo activo.",
-            ServerStatus = "Todos los nodos operativos",
-            TotalRevenue = 1500.50 // Este dato debería venir de un servicio de facturación a futuro
+            UserStats = userStats,
+            TotalCredits = totalCredits,
+            UnreadNotifications = unreadNotifications.Count,
+            NodesCount = nodesCount,
+            Message = "Datos del panel de control."
         });
     }
 

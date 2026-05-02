@@ -23,6 +23,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<PlanAccess> PlanAccesses { get; set; }
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
+    public DbSet<Notification> Notifications { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -57,5 +58,13 @@ public class ApplicationDbContext : DbContext
             .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<AuditLog>().HasQueryFilter(e => !hasTenant || e.TenantId == tenantId);
+
+        modelBuilder.Entity<Notification>()
+            .HasOne(n => n.User)
+            .WithMany()
+            .HasForeignKey(n => n.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<Notification>().HasQueryFilter(e => !hasTenant || e.TenantId == tenantId);
     }
 }

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using DevNetControl.Api.Infrastructure.Persistence;
 using DevNetControl.Api.Domain;
 using DevNetControl.Api.Infrastructure.Security;
+using DevNetControl.Api.Infrastructure.Services;
 using DevNetControl.Api.Dtos;
 
 namespace DevNetControl.Api.Controllers;
@@ -15,11 +16,13 @@ public class SessionLogController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<SessionLogController> _logger;
+    private readonly PlanValidationService _planValidationService;
 
-    public SessionLogController(ApplicationDbContext context, ILogger<SessionLogController> logger)
+    public SessionLogController(ApplicationDbContext context, ILogger<SessionLogController> logger, PlanValidationService planValidationService)
     {
         _context = context;
         _logger = logger;
+        _planValidationService = planValidationService;
     }
 
     /// <summary>
@@ -66,17 +69,7 @@ public class SessionLogController : ControllerBase
             ))
             .ToListAsync();
 
-        return Ok(new
-        {
-            Data = logs,
-            Pagination = new
-            {
-                Page = page,
-                PageSize = pageSize,
-                TotalCount = totalCount,
-                TotalPages = (totalCount + pageSize - 1) / pageSize
-            }
-        });
+        return Ok(logs);
     }
 
     /// <summary>
@@ -117,6 +110,13 @@ public class SessionLogController : ControllerBase
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
         var userName = ClaimsHelper.GetCurrentUserName(User);
         var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+
+        // Validar límite de conexiones del plan
+        var (isAllowed, message) = await _planValidationService.ValidateConnectionAsync(userId);
+        if (!isAllowed)
+        {
+            return BadRequest(new { Message = message });
+        }
 
         var sessionLog = new SessionLog
         {

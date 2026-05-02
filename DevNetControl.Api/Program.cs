@@ -67,7 +67,12 @@ builder.Services.AddScoped<SshUserManager>();
 builder.Services.AddScoped<SshSanitizerService>();
 builder.Services.AddScoped<UserProvisioningService>();
 builder.Services.AddScoped<AuditService>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<BulkOperationService>();
+builder.Services.AddScoped<NodeHealthService>();
+builder.Services.AddScoped<PlanValidationService>();
 builder.Services.AddHostedService<UserExpirationBackgroundService>();
+builder.Services.AddHostedService<NodeHealthBackgroundService>();
 
 // Rate Limiting
 builder.Services.AddRateLimiting();

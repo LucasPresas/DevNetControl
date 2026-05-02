@@ -9,7 +9,6 @@ namespace DevNetControl.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "AdminOnly")]
 public class NodeAccessController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
@@ -20,6 +19,7 @@ public class NodeAccessController : ControllerBase
     }
 
     [HttpGet("user/{userId}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetUserNodeAccess(Guid userId)
     {
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
@@ -41,6 +41,7 @@ public class NodeAccessController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GrantNodeAccess([FromBody] GrantNodeAccessRequest request)
     {
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
@@ -73,6 +74,7 @@ public class NodeAccessController : ControllerBase
     }
 
     [HttpDelete("user/{userId}/node/{nodeId}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> RevokeNodeAccess(Guid userId, Guid nodeId)
     {
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
@@ -91,6 +93,7 @@ public class NodeAccessController : ControllerBase
     }
 
     [HttpGet("my-nodes")]
+    [Authorize(Policy = "ResellerOrAbove")]
     public async Task<IActionResult> GetMyAvailableNodes()
     {
         var userId = ClaimsHelper.GetCurrentUserId(User);

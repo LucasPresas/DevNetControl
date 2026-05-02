@@ -20,16 +20,22 @@ public class UserController : ControllerBase
     private readonly UserProvisioningService _provisioningService;
     private readonly CreditService _creditService;
     private readonly AuditService _auditService;
+    private readonly BulkOperationService _bulkService;
+    private readonly PlanValidationService _planValidationService;
 
     public UserController(ApplicationDbContext context, 
                           UserProvisioningService provisioningService,
                           CreditService creditService,
-                          AuditService auditService)
+                          AuditService auditService,
+                          BulkOperationService bulkService,
+                          PlanValidationService planValidationService)
     {
         _context = context;
         _provisioningService = provisioningService;
         _creditService = creditService;
         _auditService = auditService;
+        _bulkService = bulkService;
+        _planValidationService = planValidationService;
     }
 
     #region Gestión de Usuarios y VPS
@@ -54,6 +60,29 @@ public class UserController : ControllerBase
             ClaimsHelper.GetCurrentUserId(User), ClaimsHelper.GetCurrentTenantId(User));
 
         return Ok(new { Message = result.Message, UserId = result.UserId });
+    }
+
+    [HttpPost("bulk-create")]
+    [Authorize(Policy = "ResellerOrAbove")]
+    [RateLimit("user-create")]
+    public async Task<IActionResult> BulkCreateUsers([FromForm] BulkCreateUsersRequest request)
+    {
+        var parentId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+
+        if (request.CsvFile == null || request.CsvFile.Length == 0)
+            return BadRequest(new { Message = "Debe proporcionar un archivo CSV." });
+
+        using var stream = request.CsvFile.OpenReadStream();
+        var (created, failed, errors) = await _bulkService.BulkCreateUsersAsync(parentId, tenantId, stream);
+
+        return Ok(new
+        {
+            Message = $"Proceso completado: {created} creados, {failed} fallidos.",
+            Created = created,
+            Failed = failed,
+            Errors = errors
+        });
     }
 
     [HttpPost("{id}/extend-service")]
@@ -116,6 +145,23 @@ public class UserController : ControllerBase
             user.IsProvisionedOnVps,
             Plan = user.Plan == null ? null : new { user.Plan.Name, user.Plan.MaxConnections },
             ParentName = user.Parent?.UserName
+        });
+    }
+
+    [HttpGet("me/limits")]
+    public async Task<IActionResult> GetMyLimits()
+    {
+        var userId = ClaimsHelper.GetCurrentUserId(User);
+        var (maxConnections, maxDevices, activeConnections, registeredDevices) = 
+            await _planValidationService.GetUserLimitsAsync(userId);
+
+        return Ok(new
+        {
+            MaxConnections = maxConnections,
+            MaxDevices = maxDevices,
+            ActiveConnections = activeConnections,
+            RegisteredDevices = registeredDevices,
+            Message = "Límites de tu plan."
         });
     }
 
@@ -211,6 +257,148 @@ public class UserController : ControllerBase
         var result = await _creditService.AddCreditsAsync(id, request.Amount, tenantId);
         
         return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    #endregion
+
+    #region Operaciones Masivas (Bulk)
+
+    [HttpPost("bulk/extend-service")]
+    [Authorize(Policy = "SubResellerOrAbove")]
+    public async Task<IActionResult> BulkExtendService([FromBody] BulkExtendServiceRequest request)
+    {
+        var parentId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+
+        var (successCount, failCount, errors) = await _bulkService.BulkExtendServiceAsync(
+            parentId, tenantId, request.UserIds, request.Days);
+
+        return Ok(new
+        {
+            Message = $"Proceso completado: {successCount} extendidos, {failCount} fallidos.",
+            SuccessCount = successCount,
+            FailCount = failCount,
+            Errors = errors
+        });
+    }
+
+    [HttpPost("bulk/delete")]
+    [Authorize(Policy = "SubResellerOrAbove")]
+    public async Task<IActionResult> BulkDelete([FromBody] BulkDeleteRequest request)
+    {
+        var parentId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+
+        var (successCount, failCount, errors) = await _bulkService.BulkDeleteAsync(
+            parentId, tenantId, request.UserIds);
+
+        return Ok(new
+        {
+            Message = $"Proceso completado: {successCount} eliminados, {failCount} fallidos.",
+            SuccessCount = successCount,
+            FailCount = failCount,
+            Errors = errors
+        });
+    }
+
+    [HttpGet("my-resellers")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> GetMyResellers()
+    {
+        var parentId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+
+        var resellers = await _context.Users
+            .Where(u => (u.Role == UserRole.Reseller || u.Role == UserRole.SubReseller) &&
+                          (u.ParentId == parentId || u.TenantId == tenantId))
+            .Select(u => new
+            {
+                u.Id,
+                u.UserName,
+                Role = u.Role.ToString(),
+                u.Credits,
+                u.IsActive,
+                u.ServiceExpiry,
+                Plans = u.PlanAccesses.Select(pa => new { pa.Plan.Id, pa.Plan.Name, pa.Plan.IsTrial }).ToList(),
+                Nodes = u.NodeAccesses.Select(na => na.Node.label).ToList(),
+                UserCount = _context.Users.Count(c => c.ParentId == u.Id)
+            })
+            .ToListAsync();
+
+        return Ok(resellers);
+    }
+
+    [HttpPut("{id}")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserBasicRequest request)
+    {
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
+        if (user == null) return NotFound(new { Message = "Usuario no encontrado." });
+
+        if (!string.IsNullOrEmpty(request.UserName)) user.UserName = request.UserName;
+        if (!string.IsNullOrEmpty(request.Password)) user.PasswordHash = BC.HashPassword(request.Password);
+
+        await _context.SaveChangesAsync();
+        return Ok(new { Message = "Usuario actualizado" });
+    }
+
+    [HttpPost("{id}/toggle-suspend")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> ToggleSuspend(Guid id)
+    {
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
+        if (user == null) return NotFound(new { Message = "Usuario no encontrado." });
+
+        user.IsActive = !user.IsActive;
+        await _context.SaveChangesAsync();
+        return Ok(new { Message = user.IsActive ? "Usuario activado" : "Usuario suspendido", IsActive = user.IsActive });
+    }
+
+    [HttpDelete("{id}")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> DeleteUser(Guid id)
+    {
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
+        if (user == null) return NotFound(new { Message = "Usuario no encontrado." });
+
+        // Eliminar subordinados y accesos
+        var subordinates = _context.Users.Where(u => u.ParentId == id);
+        _context.Users.RemoveRange(subordinates);
+        _context.NodeAccesses.RemoveRange(_context.NodeAccesses.Where(na => na.UserId == id));
+        _context.PlanAccesses.RemoveRange(_context.PlanAccesses.Where(pa => pa.UserId == id));
+
+        _context.Users.Remove(user);
+        await _context.SaveChangesAsync();
+        return Ok(new { Message = "Usuario eliminado" });
+    }
+
+    [HttpPost("{id}/nodes")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> UpdateUserNodes(Guid id, [FromBody] UpdateUserNodesRequest request)
+    {
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
+        if (user == null) return NotFound(new { Message = "Usuario no encontrado." });
+
+        // Eliminar accesos existentes
+        var existing = _context.NodeAccesses.Where(na => na.UserId == id);
+        _context.NodeAccesses.RemoveRange(existing);
+
+        // Agregar nuevos accesos
+        foreach (var nodeId in request.NodeIds)
+        {
+            var node = await _context.VpsNodes.FindAsync(nodeId);
+            if (node != null && node.TenantId == tenantId)
+            {
+                _context.NodeAccesses.Add(new NodeAccess { Id = Guid.NewGuid(), UserId = id, NodeId = nodeId });
+            }
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok(new { Message = "Nodos actualizados" });
     }
 
     #endregion

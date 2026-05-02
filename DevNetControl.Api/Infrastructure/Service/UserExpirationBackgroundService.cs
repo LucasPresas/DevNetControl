@@ -28,8 +28,9 @@ public class UserExpirationBackgroundService : BackgroundService
                 using var scope = _serviceProvider.CreateScope();
                 var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                 var sshUserManager = scope.ServiceProvider.GetRequiredService<SshUserManager>();
+                var notificationService = scope.ServiceProvider.GetRequiredService<NotificationService>();
 
-                await ProcessExpiredUsersAsync(context, sshUserManager, stoppingToken);
+                await ProcessExpiredUsersAsync(context, sshUserManager, notificationService, stoppingToken);
             }
             catch (Exception ex)
             {
@@ -45,6 +46,7 @@ public class UserExpirationBackgroundService : BackgroundService
     private async Task ProcessExpiredUsersAsync(
         ApplicationDbContext context,
         SshUserManager sshUserManager,
+        NotificationService notificationService,
         CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
@@ -75,6 +77,15 @@ public class UserExpirationBackgroundService : BackgroundService
                         _logger.LogWarning("Error eliminando usuario {Username} del VPS: {Error}", user.UserName, sshResult.Error);
                     }
                 }
+
+                // Notificar expiración
+                context.Notifications.Add(new Notification
+                {
+                    Type = "Expired",
+                    Message = $"Tu cuenta de prueba ha expirado el {now:yyyy-MM-dd}.",
+                    UserId = user.Id,
+                    TenantId = user.TenantId
+                });
 
                 context.Users.Remove(user);
                 await context.SaveChangesAsync(cancellationToken);
@@ -113,6 +124,15 @@ public class UserExpirationBackgroundService : BackgroundService
                         _logger.LogWarning("Error eliminando usuario pago {Username} del VPS: {Error}", user.UserName, sshResult.Error);
                     }
                 }
+
+                // Notificar expiración
+                context.Notifications.Add(new Notification
+                {
+                    Type = "Expired",
+                    Message = $"Tu servicio expiró el {now:yyyy-MM-dd}.",
+                    UserId = user.Id,
+                    TenantId = user.TenantId
+                });
 
                 user.IsProvisionedOnVps = false;
 

@@ -19,8 +19,10 @@ public record UpdatePlanRequest(string? Name, int? DurationHours, decimal? Credi
 public record ExtendServiceRequest(int Days, Guid NodeId);
 
 // Usuarios
-public record CreateUserRequest(string UserName, string Password, Guid PlanId, Guid? NodeId = null);
+public record CreateUserRequest(string UserName, string Password, Guid? PlanId = null, Guid? NodeId = null);
 public record UpdateUserRequest(decimal? Credits, DevNetControl.Api.Domain.UserRole? Role);
+public record UpdateUserBasicRequest(string? UserName = null, string? Password = null);
+public record UpdateUserNodesRequest(List<Guid> NodeIds);
 public record RemoveFromVpsRequest(Guid NodeId);
 
 // Infraestructura
@@ -37,3 +39,12 @@ public record SessionLogDto(Guid Id, Guid? UserId, string UserName, string Clien
 public record HierarchyNodeDto(Guid Id, string UserName, DevNetControl.Api.Domain.UserRole Role, decimal Credits, List<HierarchyNodeDto> Children);
 public record CreateResellerRequest(string UserName, string Password, List<Guid> PlanIds, bool IsSubReseller = false, decimal InitialCredits = 0);
 public record LoadCreditsRequest(decimal Amount);
+
+  // Bulk Operations
+  public record BulkCreateUsersRequest(IFormFile CsvFile);
+  public record BulkExtendServiceRequest(List<Guid> UserIds, int Days);
+  public record BulkDeleteRequest(List<Guid> UserIds);
+  public record GrantPlanAccessRequest(Guid UserId, Guid PlanId);
+  public record RevokePlanAccessRequest(Guid UserId, Guid PlanId);
+  public record MyNodesRequest();
+  public record UpdateUserPlansRequest(List<Guid> PlanIds);

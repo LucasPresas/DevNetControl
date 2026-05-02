@@ -17,12 +17,14 @@ public class VpsNodeController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly EncryptionService _encryption;
     private readonly SshService _sshService;
+    private readonly NodeHealthService _healthService;
 
-    public VpsNodeController(ApplicationDbContext context, EncryptionService encryption, SshService sshService)
+    public VpsNodeController(ApplicationDbContext context, EncryptionService encryption, SshService sshService, NodeHealthService healthService)
     {
         _context = context;
         _encryption = encryption;
         _sshService = sshService;
+        _healthService = healthService;
     }
 
     [HttpPost]
@@ -223,6 +225,47 @@ public class VpsNodeController : ControllerBase
         }
 
         return metrics;
+    }
+
+    /// <summary>
+    /// Verifica la salud de un nodo específico (manual)
+    /// </summary>
+    [HttpGet("{id}/health")]
+    [Authorize(Policy = "ResellerOrAbove")]
+    public async Task<IActionResult> CheckNodeHealth(Guid id)
+    {
+        var (isOnline, latency, message) = await _healthService.CheckNodeHealthAsync(id);
+        return Ok(new
+        {
+            IsOnline = isOnline,
+            LatencyMs = latency,
+            Message = message,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
+    /// <summary>
+    /// Obtiene el estado de salud de todos los nodos del tenant
+    /// </summary>
+    [HttpGet("health")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> GetAllNodesHealth()
+    {
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var nodes = await _context.VpsNodes
+            .Where(n => n.TenantId == tenantId || n.TenantId == Guid.Empty)
+            .Select(n => new
+            {
+                n.Id,
+                n.IP,
+                Label = n.label,
+                n.IsOnline,
+                n.LastHealthCheck,
+                n.LatencyMs
+            })
+            .ToListAsync();
+
+        return Ok(nodes);
     }
 }
 

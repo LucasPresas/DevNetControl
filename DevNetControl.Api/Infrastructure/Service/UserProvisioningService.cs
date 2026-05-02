@@ -20,12 +20,15 @@ public class UserProvisioningService
     }
 
     public async Task<(bool Success, string Message, Guid? UserId)> CreateUserAsync(
-        Guid parentId, Guid tenantId, string userName, string password, Guid planId, Guid? nodeId)
+        Guid parentId, Guid tenantId, string userName, string password, Guid? planId, Guid? nodeId)
     {
+        if (!planId.HasValue)
+            return (false, "PlanId es requerido.", null);
+
         if (await _context.Users.AnyAsync(u => u.UserName == userName && u.TenantId == tenantId))
             return (false, "El usuario ya existe.", null);
 
-        var plan = await _context.Plans.FindAsync(planId);
+        var plan = await _context.Plans.FindAsync(planId.Value);
         if (plan == null) return (false, "Plan no encontrado.", null);
 
         var parent = await _context.Users.FindAsync(parentId);
@@ -45,7 +48,10 @@ public class UserProvisioningService
             Credits = 0,
             IsActive = true,
             PlanId = planId,
-            ServiceExpiry = DateTime.UtcNow.AddHours(plan.DurationHours)
+            ServiceExpiry = DateTime.UtcNow.AddHours(plan.DurationHours),
+            // Marcar como trial si el plan es de costo 0
+            IsTrial = plan.CreditCost == 0,
+            TrialExpiry = plan.CreditCost == 0 ? DateTime.UtcNow.AddHours(plan.DurationHours) : null
         };
 
         _context.Users.Add(user);

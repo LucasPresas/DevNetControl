@@ -16,5 +16,10 @@ namespace DevNetControl.Api.Domain
         public User Owner { get; set; } = null!;
         public Tenant Tenant { get; set; } = null!;
         public ICollection<NodeAccess> AllowedUsers { get; set; } = new List<NodeAccess>();
+
+        // Node Health Checks
+        public DateTime? LastHealthCheck { get; set; }
+        public bool IsOnline { get; set; } = false;
+        public long LatencyMs { get; set; } = 0;
     }
 }

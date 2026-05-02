@@ -37,6 +37,7 @@ namespace DevNetControl.Api.Domain
         public ICollection<VpsNode> OwnedNodes { get; set; } = new List<VpsNode>();
         public ICollection<SessionLog> Sessions { get; set; } = new List<SessionLog>();
         public ICollection<PlanAccess> PlanAccesses { get; set; } = new List<PlanAccess>();
+        public ICollection<NodeAccess> NodeAccesses { get; set; } = new List<NodeAccess>();
 
         public Tenant Tenant { get; set; } = null!;
     }
