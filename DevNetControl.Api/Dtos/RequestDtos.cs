@@ -36,17 +36,18 @@ public record ExtendServiceRequest(int Days, Guid NodeId);
 // Usuarios
 public record CreateUserRequest(string UserName, string Password, Guid? PlanId = null, Guid? NodeId = null);
 public record UpdateUserRequest(decimal? Credits, DevNetControl.Api.Domain.UserRole? Role);
-public record UpdateUserBasicRequest(string? UserName = null, string? Password = null, Guid? ParentId = null, int? MaxConnections = null);
+public record UpdateUserBasicRequest(string? UserName = null, string? Password = null, Guid? ParentId = null, int? MaxConnections = null, Guid? NodeId = null);
 public record UpdateUserNodesRequest(List<Guid> NodeIds);
 public record RemoveFromVpsRequest(Guid NodeId);
 public record AddConnectionRequest(int ConnectionsToAdd = 1);
 public record RenewPlanRequest(Guid PlanId, int DurationHours);
 
-// Infraestructura
-public record CreateNodeRequest(string IP, int SshPort, string Label, string Password, decimal CreditCost);
-public record UpdateNodeRequest(string? IP, int? SshPort, string? Label, string? Password);
-public record ExecuteCommandRequest(string Command);
-public record GrantNodeAccessRequest(Guid UserId, Guid NodeId);
+  // Infraestructura
+  public record CreateNodeRequest(string IP, int SshPort, string Label, string Password, decimal CreditCost);
+  public record UpdateNodeRequest(string? IP, int? SshPort, string? Label, string? Password);
+  public record ExecuteCommandRequest(string Command);
+  public record GrantNodeAccessRequest(Guid UserId, Guid NodeId);
+  public record BulkDeleteNodesRequest(List<Guid> NodeIds);
 
 // Session Logs
 public record CreateSessionLogRequest(string Action, string Details, string? NodeIp = null);
@@ -61,6 +62,8 @@ public record LoadCreditsRequest(decimal Amount);
   public record BulkCreateUsersRequest(IFormFile CsvFile);
   public record BulkExtendServiceRequest(List<Guid> UserIds, int Days);
   public record BulkDeleteRequest(List<Guid> UserIds);
+  public record BulkToggleSuspendRequest(List<Guid> UserIds);
+  public record BulkDeletePlansRequest(List<Guid> PlanIds);
   public record GrantPlanAccessRequest(Guid UserId, Guid PlanId);
   public record RevokePlanAccessRequest(Guid UserId, Guid PlanId);
   public record MyNodesRequest();

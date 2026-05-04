@@ -171,6 +171,48 @@ public class PlanController : ControllerBase
         await _context.SaveChangesAsync();
         return Ok(new { Message = "Planes actualizados" });
     }
+
+    [HttpPost("bulk-delete")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> BulkDeletePlans([FromBody] BulkDeletePlansRequest request)
+    {
+        var role = ClaimsHelper.GetCurrentRole(User);
+
+        int successCount = 0;
+        int failCount = 0;
+        var errors = new List<string>();
+
+        foreach (var id in request.PlanIds)
+        {
+            var plan = await _context.Plans.FindAsync(id);
+            if (plan == null)
+            {
+                failCount++;
+                errors.Add($"Plan {id} no encontrado");
+                continue;
+            }
+
+            if (role != "SuperAdmin" && plan.TenantId == Guid.Empty)
+            {
+                failCount++;
+                errors.Add($"Plan {plan.Name} es global y no se puede eliminar");
+                continue;
+            }
+
+            _context.Plans.Remove(plan);
+            successCount++;
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            Message = $"Proceso completado: {successCount} eliminados, {failCount} fallidos.",
+            SuccessCount = successCount,
+            FailCount = failCount,
+            Errors = errors
+        });
+    }
 }
 
 public record PlanResponse(Guid Id, string Name, string Description, int DurationHours, decimal CreditCost, int MaxConnections, int MaxDevices, bool IsActive, bool IsTrial, int UsersCount);

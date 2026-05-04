@@ -6,6 +6,7 @@ using DevNetControl.Api.Infrastructure.Services;
 using DevNetControl.Api.Infrastructure.Security;
 using DevNetControl.Api.Infrastructure.RateLimiting;
 using DevNetControl.Api.Domain;
+using DevNetControl.Api.Dtos;
 
 namespace DevNetControl.Api.Controllers;
 
@@ -266,6 +267,48 @@ public class VpsNodeController : ControllerBase
             .ToListAsync();
 
         return Ok(nodes);
+    }
+
+    /// <summary>
+    /// Eliminación masiva de nodos
+    /// </summary>
+    [HttpPost("bulk-delete")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> BulkDeleteNodes([FromBody] BulkDeleteNodesRequest request)
+    {
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var role = ClaimsHelper.GetCurrentRole(User);
+
+        if (role != "Admin" && role != "SuperAdmin")
+            return Forbid();
+
+        int successCount = 0;
+        int failCount = 0;
+        var errors = new List<string>();
+
+        foreach (var id in request.NodeIds)
+        {
+            var node = await _context.VpsNodes.FindAsync(id);
+            if (node == null || node.TenantId != tenantId)
+            {
+                failCount++;
+                errors.Add($"Nodo {id} no encontrado");
+                continue;
+            }
+
+            _context.VpsNodes.Remove(node);
+            successCount++;
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            Message = $"Proceso completado: {successCount} eliminados, {failCount} fallidos.",
+            SuccessCount = successCount,
+            FailCount = failCount,
+            Errors = errors
+        });
     }
 }
 

@@ -199,7 +199,7 @@ public class UserController : ControllerBase
     {
         var parentId = ClaimsHelper.GetCurrentUserId(User);
         var subUsers = await _context.Users
-            .Where(u => u.ParentId == parentId)
+            .Where(u => u.ParentId == parentId && u.Role != UserRole.Reseller && u.Role != UserRole.SubReseller)
             .Include(u => u.Plan)
             .Include(u => u.Parent)
             .Select(u => new {
@@ -211,7 +211,11 @@ public class UserController : ControllerBase
                 Role = u.Role.ToString(),
                 ResellerName = u.Parent != null ? u.Parent.UserName : "N/A",
                 MaxConnections = u.Plan != null ? u.Plan.MaxConnections + u.AdditionalConnections : u.AdditionalConnections,
-                PlanName = u.Plan != null ? u.Plan.Name : "Sin Plan"
+                PlanName = u.Plan != null ? u.Plan.Name : "Sin Plan",
+                u.IsTrial,
+                u.IsProvisionedOnVps,
+                PlanDurationHours = u.Plan != null ? u.Plan.DurationHours : 0,
+                u.AdditionalConnections
             }).ToListAsync();
 
         return Ok(subUsers);
@@ -350,21 +354,118 @@ public class UserController : ControllerBase
     [Authorize(Policy = "SubResellerOrAbove")]
     public async Task<IActionResult> BulkDelete([FromBody] BulkDeleteRequest request)
     {
-        var parentId = ClaimsHelper.GetCurrentUserId(User);
+        var actorUserId = ClaimsHelper.GetCurrentUserId(User);
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
         var actorRole = ClaimsHelper.GetCurrentRole(User);
         var actorUserName = ClaimsHelper.GetCurrentUserName(User);
 
-        var (successCount, failCount, errors) = await _bulkService.BulkDeleteAsync(
-            parentId, tenantId, request.UserIds, parentId, actorRole, actorUserName);
+        // Si es Admin o SuperAdmin, puede eliminar sin verificación de jerarquía
+        if (actorRole == "Admin" || actorRole == "SuperAdmin")
+        {
+            int successCount = 0;
+            int failCount = 0;
+            var errors = new List<string>();
+
+            foreach (var id in request.UserIds)
+            {
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
+                if (user == null)
+                {
+                    failCount++;
+                    errors.Add($"Usuario {id} no encontrado");
+                    continue;
+                }
+
+                // No permitir eliminar Admins o SuperAdmins
+                if (user.Role == UserRole.Admin || user.Role == UserRole.SuperAdmin)
+                {
+                    failCount++;
+                    errors.Add($"No se puede eliminar al usuario administrativo {user.UserName}");
+                    continue;
+                }
+
+                // Eliminar subordinados y accesos relacionados
+                var subords = _context.Users.Where(u => u.ParentId == id);
+                _context.Users.RemoveRange(subords);
+                _context.NodeAccesses.RemoveRange(_context.NodeAccesses.Where(na => na.UserId == id));
+                _context.PlanAccesses.RemoveRange(_context.PlanAccesses.Where(pa => pa.UserId == id));
+
+                _context.Users.Remove(user);
+                successCount++;
+            }
+
+            await _context.SaveChangesAsync();
+
+            await _activityLogService.LogBulkOperationAsync(
+                actorUserId, tenantId, actorRole, actorUserName,
+                "BulkDelete", request.UserIds.Count, successCount, failCount);
+
+            return Ok(new
+            {
+                Message = $"Proceso completado: {successCount} eliminados, {failCount} fallidos.",
+                SuccessCount = successCount,
+                FailCount = failCount,
+                Errors = errors
+            });
+        }
+
+        // Para SubResellers, usar lógica original con verificación de jerarquía
+        var (successCount2, failCount2, errors2) = await _bulkService.BulkDeleteAsync(
+            actorUserId, tenantId, request.UserIds, actorUserId, actorRole, actorUserName);
 
         await _activityLogService.LogBulkOperationAsync(
-            parentId, tenantId, actorRole, actorUserName,
-            "BulkDelete", request.UserIds.Count, successCount, failCount);
+            actorUserId, tenantId, actorRole, actorUserName,
+            "BulkDelete", request.UserIds.Count, successCount2, failCount2);
 
         return Ok(new
         {
-            Message = $"Proceso completado: {successCount} eliminados, {failCount} fallidos.",
+            Message = $"Proceso completado: {successCount2} eliminados, {failCount2} fallidos.",
+            SuccessCount = successCount2,
+            FailCount = failCount2,
+            Errors = errors2
+        });
+    }
+
+    [HttpPost("bulk/toggle-suspend")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> BulkToggleSuspend([FromBody] BulkToggleSuspendRequest request)
+    {
+        var actorUserId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
+
+        int successCount = 0;
+        int failCount = 0;
+        var errors = new List<string>();
+
+        foreach (var id in request.UserIds)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
+            if (user == null)
+            {
+                failCount++;
+                errors.Add($"Usuario {id} no encontrado");
+                continue;
+            }
+
+            user.IsActive = !user.IsActive;
+            successCount++;
+
+            await _activityLogService.LogUserSuspendedAsync(
+                actorUserId, user.Id, user.UserName,
+                tenantId, actorRole, actorUserName, !user.IsActive);
+        }
+
+        await _context.SaveChangesAsync();
+
+        await _activityLogService.LogBulkOperationAsync(
+            actorUserId, tenantId, actorRole, actorUserName,
+            "BulkToggleSuspend", request.UserIds.Count, successCount, failCount);
+
+        return Ok(new
+        {
+            Message = $"Proceso completado: {successCount} actualizados, {failCount} fallidos.",
             SuccessCount = successCount,
             FailCount = failCount,
             Errors = errors
@@ -372,7 +473,7 @@ public class UserController : ControllerBase
     }
 
     [HttpGet("my-resellers")]
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "ResellerOrAbove")]
     public async Task<IActionResult> GetMyResellers()
     {
         var parentId = ClaimsHelper.GetCurrentUserId(User);
@@ -408,6 +509,19 @@ public class UserController : ControllerBase
 
         if (!string.IsNullOrEmpty(request.UserName)) user.UserName = request.UserName;
         if (!string.IsNullOrEmpty(request.Password)) user.PasswordHash = BC.HashPassword(request.Password);
+
+        // Actualizar nodo si se especifica
+        if (request.NodeId.HasValue)
+        {
+            var node = await _context.VpsNodes.FindAsync(request.NodeId.Value);
+            if (node != null && (node.TenantId == tenantId || node.TenantId == Guid.Empty))
+            {
+                // Eliminar accesos existentes y asignar nuevo nodo
+                var existingAccess = _context.NodeAccesses.Where(na => na.UserId == id);
+                _context.NodeAccesses.RemoveRange(existingAccess);
+                _context.NodeAccesses.Add(new NodeAccess { Id = Guid.NewGuid(), UserId = id, NodeId = request.NodeId.Value });
+            }
+        }
 
         await _context.SaveChangesAsync();
         return Ok(new { Message = "Usuario actualizado" });
