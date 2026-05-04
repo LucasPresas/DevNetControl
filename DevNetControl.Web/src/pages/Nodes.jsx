@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../lib/api'
-import { Server, Plus, Loader2, Check, X, Wifi, Terminal, Settings } from 'lucide-react'
+import { Server, Plus, Loader2, Check, X, Wifi, Terminal, Settings, Trash2 } from 'lucide-react'
+import { bulkDeleteNodes } from '../lib/api'
 
 export default function Nodes() {
   const [nodes, setNodes] = useState([])
@@ -11,6 +12,7 @@ export default function Nodes() {
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState(null)
   const [testingNode, setTestingNode] = useState(null)
+  const [selectedIds, setSelectedIds] = useState([])
 
   useEffect(() => {
     fetchNodes()
@@ -74,6 +76,52 @@ export default function Nodes() {
     }
   }
 
+  function toggleSelect(id) {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.length === nodes.length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(nodes.map(n => n.id))
+    }
+  }
+
+  async function handleBulkDelete() {
+    console.group('🗑️ Nodes.handleBulkDelete INICIADO')
+    console.log('📊 selectedIds:', selectedIds)
+    
+    if (selectedIds.length === 0) {
+      console.warn('⚠️ No hay nodos seleccionados')
+      console.groupEnd()
+      return
+    }
+    
+    const confirmDelete = confirm(`Eliminar ${selectedIds.length} nodos? Esta accion no se puede deshacer.`)
+    console.log('✓ Confirmación del usuario:', confirmDelete)
+    
+    if (!confirmDelete) {
+      console.log('❌ Usuario canceló la operación')
+      console.groupEnd()
+      return
+    }
+    
+    try {
+      console.log('🔄 Enviando petición DELETE bulk...')
+      const { data } = await bulkDeleteNodes(selectedIds)
+      console.log('✅ Respuesta exitosa:', data)
+      alert(data.message)
+      setSelectedIds([])
+      fetchNodes()
+    } catch (err) {
+      console.error('❌ Error en handleBulkDelete:', err)
+      alert(err.response?.data?.message || 'Error al eliminar')
+    } finally {
+      console.groupEnd()
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -127,6 +175,19 @@ export default function Nodes() {
         </form>
       )}
 
+      {/* Bulk Actions */}
+      {selectedIds.length > 0 && (
+        <div className="flex items-center gap-2 mb-4">
+          <span className="flex items-center text-sm text-[var(--text-secondary)] mr-1">
+            {selectedIds.length} seleccionados
+          </span>
+          <button onClick={handleBulkDelete} className="btn btn-secondary text-sm text-red-400 border-red-500/30 hover:bg-red-500/10">
+            <Trash2 className="w-4 h-4" />
+            Eliminar
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
       ) : nodes.length === 0 ? (
@@ -139,6 +200,14 @@ export default function Nodes() {
           <table className="table">
             <thead>
               <tr>
+                <th className="w-10">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.length === nodes.length && nodes.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-[var(--border-color)] bg-[var(--bg-primary)] text-blue-500 focus:ring-blue-500"
+                  />
+                </th>
                 <th>Nodo</th>
                 <th>Direccion</th>
                 <th>Propietario</th>
@@ -149,6 +218,14 @@ export default function Nodes() {
             <tbody>
               {nodes.map(n => (
                 <tr key={n.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(n.id)}
+                      onChange={() => toggleSelect(n.id)}
+                      className="w-4 h-4 rounded border-[var(--border-color)] bg-[var(--bg-primary)] text-blue-500 focus:ring-blue-500"
+                    />
+                  </td>
                   <td>
                     <div className="flex items-center gap-2">
                       <span className="status-dot online" />

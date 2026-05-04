@@ -177,39 +177,19 @@ export default function Resellers() {
   }
 
   async function handleBulkDelete() {
-    console.group('🗑️ Resellers.handleBulkDelete INICIADO')
-    console.log('📊 selectedIds:', selectedIds)
-    
-    if (selectedIds.length === 0) {
-      console.warn('⚠️ No hay resellers seleccionados')
-      console.groupEnd()
-      return
-    }
-    
-    const confirmDelete = confirm(`Eliminar ${selectedIds.length} resellers? Esta accion no se puede deshacer.`)
-    console.log('✓ Confirmación del usuario:', confirmDelete)
-    
-    if (!confirmDelete) {
-      console.log('❌ Usuario canceló la operación')
-      console.groupEnd()
-      return
-    }
-    
+    if (selectedIds.length === 0) return
+    if (!confirm(`Eliminar ${selectedIds.length} resellers? Esta accion no se puede deshacer.`)) return
     setActionLoading(true)
     setMessage(null)
     try {
-      console.log('🔄 Enviando petición DELETE bulk...')
       const { data } = await bulkDeleteResellers(selectedIds)
-      console.log('✅ Respuesta exitosa:', data)
       setMessage({ type: 'success', text: data.message })
       setSelectedIds([])
       fetchData()
     } catch (err) {
-      console.error('❌ Error en handleBulkDelete:', err)
       setMessage({ type: 'error', text: err.response?.data?.message || 'Error al eliminar' })
     } finally {
       setActionLoading(false)
-      console.groupEnd()
     }
   }
 

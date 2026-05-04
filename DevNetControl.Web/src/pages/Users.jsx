@@ -30,6 +30,8 @@ export default function Users() {
   const [showAddConnectionsModal, setShowAddConnectionsModal] = useState(false)
   const [showRenewPlanModal, setShowRenewPlanModal] = useState(false)
   const [selectedUser, setSelectedUser] = useState(null)
+  const [resellers, setResellers] = useState([])
+  const [selectedResellerFilter, setSelectedResellerFilter] = useState('')
 
   useEffect(() => {
     fetchData()
@@ -37,14 +39,16 @@ export default function Users() {
 
   async function fetchData() {
     try {
-      const [usersRes, plansRes, nodesRes] = await Promise.all([
+      const [usersRes, plansRes, nodesRes, resellersRes] = await Promise.all([
         api.get('/user/my-subusers'),
         api.get('/plan/my-plans'),
         api.get('/nodeaccess/my-nodes'),
+        api.get('/user/my-resellers'),
       ])
       setUsers(usersRes.data)
       setPlans(plansRes.data)
       setAvailableNodes(nodesRes.data)
+      setResellers(resellersRes.data)
     } catch (err) {
       console.error('Error:', err)
     } finally {
@@ -107,10 +111,17 @@ export default function Users() {
   }
 
   const filteredUsers = users.filter(u => {
+    // Solo mostrar Customers (no resellers)
+    if (u.role === 'Reseller' || u.role === 'SubReseller') return false
+
     if (search && !u.userName.toLowerCase().includes(search.toLowerCase())) return false
     if (filter === 'active') return u.serviceExpiry && new Date(u.serviceExpiry) > new Date() && !u.isTrial
     if (filter === 'expired') return u.serviceExpiry && new Date(u.serviceExpiry) <= new Date()
     if (filter === 'trial') return u.isTrial
+
+    // Filtro por reseller
+    if (selectedResellerFilter && u.resellerName !== selectedResellerFilter) return false
+
     return true
   })
 
@@ -147,21 +158,55 @@ export default function Users() {
   }
 
   async function handleBulkDelete() {
-    if (selectedIds.length === 0) return
-    if (!confirm(`Eliminar ${selectedIds.length} usuarios? Esta accion no se puede deshacer.`)) return
+    console.group('🗑️ handleBulkDelete INICIADO')
+    console.log('📊 selectedIds:', selectedIds)
+    
+    if (selectedIds.length === 0) {
+      console.warn('⚠️ No hay usuarios seleccionados')
+      console.groupEnd()
+      return
+    }
+    
+    const confirmDelete = confirm(`Eliminar ${selectedIds.length} usuarios? Esta accion no se puede deshacer.`)
+    console.log('✓ Confirmación del usuario:', confirmDelete)
+    
+    if (!confirmDelete) {
+      console.log('❌ Usuario canceló la operación')
+      console.groupEnd()
+      return
+    }
+    
     setBulkLoading(true)
     setMessage(null)
+    
     try {
-      const { data } = await api.post('/user/bulk/delete', {
-        userIds: selectedIds,
-      })
+      console.log('🔄 Enviando petición DELETE bulk...')
+      const payload = { UserIds: selectedIds }
+      console.log('📦 Payload:', JSON.stringify(payload, null, 2))
+      
+      const { data } = await api.post('/user/bulk/delete', payload)
+      
+      console.log('✅ Respuesta exitosa:', data)
       setMessage({ type: 'success', text: data.message })
       setSelectedIds([])
       fetchData()
+      console.log('✓ UI actualizada - fetchData ejecutado')
     } catch (err) {
+      console.error('❌ Error en handleBulkDelete:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        config: {
+          url: err.config?.url,
+          method: err.config?.method,
+          data: err.config?.data
+        }
+      })
       setMessage({ type: 'error', text: err.response?.data?.message || 'Error al eliminar' })
     } finally {
       setBulkLoading(false)
+      console.groupEnd()
     }
   }
 
@@ -350,6 +395,18 @@ export default function Users() {
             placeholder="Buscar usuario..."
           />
         </div>
+        <div>
+          <select
+            value={selectedResellerFilter}
+            onChange={(e) => setSelectedResellerFilter(e.target.value)}
+            className="input"
+          >
+            <option value="">Todos los resellers</option>
+            {resellers.map(r => (
+              <option key={r.id} value={r.userName}>{r.userName}</option>
+            ))}
+          </select>
+        </div>
         <div className="flex gap-1.5">
           {[
             { key: 'all', label: 'Todos' },
@@ -488,6 +545,7 @@ export default function Users() {
         show={showEditModal}
         onClose={() => setShowEditModal(false)}
         user={selectedUser}
+        availableNodes={availableNodes}
         onSuccess={handleModalSuccess}
       />
       <AddConnectionsModal

@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
-import { X, Check, Loader2 } from 'lucide-react'
+import { X, Check, Loader2, Server } from 'lucide-react'
 import { updateUserBasic } from '../../lib/api'
 
-export default function EditUserModal({ show, onClose, user, onSuccess }) {
+export default function EditUserModal({ show, onClose, user, onSuccess, availableNodes }) {
   const [form, setForm] = useState({
     userName: '',
     password: '',
     parentId: '',
     maxConnections: '',
+    nodeId: '',
   })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
@@ -19,6 +20,7 @@ export default function EditUserModal({ show, onClose, user, onSuccess }) {
         password: '',
         parentId: user.parentId || '',
         maxConnections: user.additionalConnections || 0,
+        nodeId: user.nodeId || '',
       })
       setMessage(null)
     }
@@ -36,6 +38,7 @@ export default function EditUserModal({ show, onClose, user, onSuccess }) {
     if (form.maxConnections !== '' && parseInt(form.maxConnections) !== user.additionalConnections) {
       data.maxConnections = parseInt(form.maxConnections)
     }
+    if (form.nodeId && form.nodeId !== user.nodeId) data.nodeId = form.nodeId
 
     if (Object.keys(data).length === 0) {
       setMessage({ type: 'error', text: 'No hay cambios para guardar' })
@@ -110,6 +113,23 @@ export default function EditUserModal({ show, onClose, user, onSuccess }) {
               className="input"
               placeholder="Dejar vacío para no cambiar (GUID válido)"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+              <Server className="w-3 h-3 inline mr-1" />
+              Nodo VPS
+            </label>
+            <select
+              value={form.nodeId}
+              onChange={(e) => setForm({ ...form, nodeId: e.target.value })}
+              className="input"
+            >
+              <option value="">Sin cambios</option>
+              {(availableNodes || []).map(n => (
+                <option key={n.id} value={n.id}>{n.label} ({n.ip})</option>
+              ))}
+            </select>
           </div>
 
           <div>

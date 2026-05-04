@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import api from '../lib/api'
 import { FileText, Plus, Loader2, Check, X, Edit, ToggleRight, ToggleLeft, Trash2, Clock } from 'lucide-react'
+import { bulkDeletePlans } from '../lib/api'
 
 export default function Plans() {
   const [plans, setPlans] = useState([])
@@ -10,6 +11,7 @@ export default function Plans() {
   const [form, setForm] = useState({ name: '', description: '', durationType: 'days', durationValue: 30, creditCost: 1, maxConnections: 1, maxDevices: 1 })
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState(null)
+  const [selectedIds, setSelectedIds] = useState([])
 
   useEffect(() => {
     fetchPlans()
@@ -95,6 +97,52 @@ export default function Plans() {
     setForm({ name: '', description: '', durationType: 'days', durationValue: 30, creditCost: 1, maxConnections: 1, maxDevices: 1 })
     setShowCreate(false)
     setEditingPlan(null)
+  }
+
+  function toggleSelect(id) {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.length === plans.length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(plans.map(p => p.id))
+    }
+  }
+
+  async function handleBulkDelete() {
+    console.group('🗑️ Plans.handleBulkDelete INICIADO')
+    console.log('📊 selectedIds:', selectedIds)
+    
+    if (selectedIds.length === 0) {
+      console.warn('⚠️ No hay planes seleccionados')
+      console.groupEnd()
+      return
+    }
+    
+    const confirmDelete = confirm(`Eliminar ${selectedIds.length} planes? Esta accion no se puede deshacer.`)
+    console.log('✓ Confirmación del usuario:', confirmDelete)
+    
+    if (!confirmDelete) {
+      console.log('❌ Usuario canceló la operación')
+      console.groupEnd()
+      return
+    }
+    
+    try {
+      console.log('🔄 Enviando petición DELETE bulk...')
+      const { data } = await bulkDeletePlans(selectedIds)
+      console.log('✅ Respuesta exitosa:', data)
+      setMessage({ type: 'success', text: data.message })
+      setSelectedIds([])
+      fetchPlans()
+    } catch (err) {
+      console.error('❌ Error en handleBulkDelete:', err)
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Error al eliminar' })
+    } finally {
+      console.groupEnd()
+    }
   }
 
   function startEdit(plan) {
@@ -222,6 +270,19 @@ export default function Plans() {
         </form>
       )}
 
+      {/* Bulk Actions */}
+      {selectedIds.length > 0 && (
+        <div className="flex items-center gap-2 mb-4">
+          <span className="flex items-center text-sm text-[var(--text-secondary)] mr-1">
+            {selectedIds.length} seleccionados
+          </span>
+          <button onClick={handleBulkDelete} className="btn btn-secondary text-sm text-red-400 border-red-500/30 hover:bg-red-500/10">
+            <Trash2 className="w-4 h-4" />
+            Eliminar
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
       ) : plans.length === 0 ? (
@@ -234,6 +295,14 @@ export default function Plans() {
           <table className="table">
             <thead>
               <tr>
+                <th className="w-10">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.length === plans.length && plans.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-[var(--border-color)] bg-[var(--bg-primary)] text-blue-500 focus:ring-blue-500"
+                  />
+                </th>
                 <th>Nombre</th>
                 <th>Duracion</th>
                 <th>Costo</th>
@@ -248,6 +317,14 @@ export default function Plans() {
             <tbody>
               {plans.map(p => (
                 <tr key={p.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(p.id)}
+                      onChange={() => toggleSelect(p.id)}
+                      className="w-4 h-4 rounded border-[var(--border-color)] bg-[var(--bg-primary)] text-blue-500 focus:ring-blue-500"
+                    />
+                  </td>
                   <td>
                     <p className="font-medium text-[var(--text-primary)]">{p.name}</p>
                     {p.description && <p className="text-xs text-[var(--text-muted)]">{p.description}</p>}
