@@ -31,6 +31,9 @@ public class CreditService
         if (source == null || target == null) return (false, "Usuario no encontrado.");
         if (source.Role != UserRole.Admin && source.Credits < amount) return (false, "Saldo insuficiente.");
 
+        var sourceBalanceBefore = source.Credits;
+        var targetBalanceBefore = target.Credits;
+
         using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
@@ -42,16 +45,34 @@ public class CreditService
                 Id = Guid.NewGuid(),
                 TenantId = source.TenantId,
                 SourceUserId = sourceUserId,
+                SourceBalanceBefore = sourceBalanceBefore,
+                SourceBalanceAfter = source.Credits,
                 TargetUserId = targetUserId,
+                TargetBalanceBefore = targetBalanceBefore,
+                TargetBalanceAfter = target.Credits,
                 Amount = amount,
                 Type = CreditTransactionType.Transfer,
                 CreatedAt = DateTime.UtcNow
             });
 
+            _context.ActivityLogs.Add(new ActivityLog
+            {
+                ActionType = ActivityActionType.CreditsTransferred,
+                ActorUserId = sourceUserId,
+                ActorUserName = source.UserName,
+                ActorRole = source.Role.ToString(),
+                TargetUserId = targetUserId,
+                TargetUserName = target.UserName,
+                CreditsConsumed = amount,
+                CreditsBalanceBefore = sourceBalanceBefore,
+                CreditsBalanceAfter = source.Credits,
+                Description = $"Transferencia de {amount} créditos a '{target.UserName}'. Saldo origen: {sourceBalanceBefore} -> {source.Credits}. Saldo destino: {targetBalanceBefore} -> {target.Credits}",
+                TenantId = source.TenantId
+            });
+
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            // Verificar si source quedó con créditos bajos
             if (source.Role != UserRole.Admin && source.Credits <= 10m)
                 await _notificationService.GenerateLowCreditAlertsAsync();
 
@@ -64,11 +85,12 @@ public class CreditService
         }
     }
 
-    // Firma corregida para aceptar 3 argumentos (targetUserId, amount, tenantId)
-    public async Task<(bool Success, string Message)> AddCreditsAsync(Guid targetUserId, decimal amount, Guid tenantId)
+    public async Task<(bool Success, string Message)> AddCreditsAsync(Guid targetUserId, decimal amount, Guid tenantId, Guid? actorUserId = null, string? actorRole = null, string? actorUserName = null)
     {
         var targetUser = await _context.Users.FindAsync(targetUserId);
         if (targetUser == null) return (false, "Usuario no encontrado.");
+
+        var targetBalanceBefore = targetUser.Credits;
 
         targetUser.Credits += amount;
 
@@ -77,15 +99,36 @@ public class CreditService
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             SourceUserId = targetUserId,
+            SourceBalanceBefore = targetBalanceBefore,
+            SourceBalanceAfter = targetUser.Credits,
             TargetUserId = targetUserId,
+            TargetBalanceBefore = targetBalanceBefore,
+            TargetBalanceAfter = targetUser.Credits,
             Amount = amount,
             Type = CreditTransactionType.AdminCredit,
             CreatedAt = DateTime.UtcNow
         });
 
+        if (actorUserId.HasValue && !string.IsNullOrEmpty(actorUserName))
+        {
+            _context.ActivityLogs.Add(new ActivityLog
+            {
+                ActionType = ActivityActionType.CreditsLoaded,
+                ActorUserId = actorUserId.Value,
+                ActorUserName = actorUserName,
+                ActorRole = actorRole ?? "Admin",
+                TargetUserId = targetUserId,
+                TargetUserName = targetUser.UserName,
+                CreditsConsumed = 0,
+                CreditsBalanceBefore = targetBalanceBefore,
+                CreditsBalanceAfter = targetUser.Credits,
+                Description = $"Carga de {amount} créditos a '{targetUser.UserName}'. Saldo: {targetBalanceBefore} -> {targetUser.Credits}",
+                TenantId = tenantId
+            });
+        }
+
         await _context.SaveChangesAsync();
 
-        // Verificar si quedó con créditos bajos
         if (targetUser.Credits <= 10m)
             await _notificationService.GenerateLowCreditAlertsAsync();
 

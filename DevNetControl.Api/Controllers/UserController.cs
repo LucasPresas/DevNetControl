@@ -20,6 +20,7 @@ public class UserController : ControllerBase
     private readonly UserProvisioningService _provisioningService;
     private readonly CreditService _creditService;
     private readonly AuditService _auditService;
+    private readonly ActivityLogService _activityLogService;
     private readonly BulkOperationService _bulkService;
     private readonly PlanValidationService _planValidationService;
 
@@ -27,6 +28,7 @@ public class UserController : ControllerBase
                           UserProvisioningService provisioningService,
                           CreditService creditService,
                           AuditService auditService,
+                          ActivityLogService activityLogService,
                           BulkOperationService bulkService,
                           PlanValidationService planValidationService)
     {
@@ -34,6 +36,7 @@ public class UserController : ControllerBase
         _provisioningService = provisioningService;
         _creditService = creditService;
         _auditService = auditService;
+        _activityLogService = activityLogService;
         _bulkService = bulkService;
         _planValidationService = planValidationService;
     }
@@ -47,6 +50,14 @@ public class UserController : ControllerBase
     {
         var parentId = ClaimsHelper.GetCurrentUserId(User);
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
+
+        var parent = await _context.Users.FindAsync(parentId);
+        var creditsBefore = parent?.Credits ?? 0;
+
+        var plan = request.PlanId.HasValue ? await _context.Plans.FindAsync(request.PlanId.Value) : null;
+        var planName = plan?.Name;
 
         var result = await _provisioningService.CreateUserAsync(
             parentId, tenantId, request.UserName, request.Password, request.PlanId, request.NodeId);
@@ -54,7 +65,17 @@ public class UserController : ControllerBase
         if (!result.Success)
             return BadRequest(new { Message = result.Message });
 
-        // Auditar creación de usuario
+        var parentAfter = await _context.Users.FindAsync(parentId);
+        var creditsAfter = parentAfter?.Credits ?? 0;
+
+        if (result.UserId.HasValue)
+        {
+            await _activityLogService.LogUserCreatedAsync(
+                parentId, result.UserId.Value, request.UserName,
+                tenantId, actorRole, actorUserName,
+                creditsBefore, creditsAfter, request.PlanId, planName);
+        }
+
         await _auditService.LogAsync("UserCreated", 
             $"Usuario creado: {request.UserName} por {User.Identity?.Name}", 
             ClaimsHelper.GetCurrentUserId(User), ClaimsHelper.GetCurrentTenantId(User));
@@ -198,17 +219,23 @@ public class UserController : ControllerBase
     {
         var adminId = ClaimsHelper.GetCurrentUserId(User);
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
 
         if (await _context.Users.AnyAsync(u => u.UserName == request.UserName && u.TenantId == tenantId))
             return BadRequest("El usuario ya existe.");
 
-        // Lógica de validación de costos de planes simplificada
+        var admin = await _context.Users.FindAsync(adminId);
+        if (admin == null) return NotFound("Admin no encontrado.");
+
+        var creditsBefore = admin.Credits;
+
         var plans = await _context.Plans.Where(p => request.PlanIds.Contains(p.Id)).ToListAsync();
         decimal totalCost = plans.Sum(p => p.CreditCost);
 
-        var admin = await _context.Users.FindAsync(adminId);
-        if (admin == null) return NotFound("Admin no encontrado.");
         if (admin.Credits < totalCost) return BadRequest("Créditos insuficientes para asignar estos planes.");
+
+        var planNames = plans.Select(p => p.Name).ToList();
 
         var reseller = new User {
             Id = Guid.NewGuid(),
@@ -223,14 +250,17 @@ public class UserController : ControllerBase
 
         _context.Users.Add(reseller);
         
-        // Registro de Auditoría Unificado (Source/Target)
         if (totalCost > 0) {
             admin.Credits -= totalCost;
             _context.CreditTransactions.Add(new CreditTransaction {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
                 SourceUserId = adminId,
+                SourceBalanceBefore = creditsBefore,
+                SourceBalanceAfter = admin.Credits,
                 TargetUserId = reseller.Id,
+                TargetBalanceBefore = request.InitialCredits,
+                TargetBalanceAfter = request.InitialCredits,
                 Amount = totalCost,
                 Type = CreditTransactionType.PlanPurchase,
                 CreatedAt = DateTime.UtcNow,
@@ -240,10 +270,26 @@ public class UserController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        // Auditar creación de reseller
+        var creditsAfter = admin.Credits;
+
+        if (request.IsSubReseller)
+        {
+            await _activityLogService.LogSubResellerCreatedAsync(
+                adminId, reseller.Id, request.UserName,
+                tenantId, actorRole, actorUserName,
+                creditsBefore, creditsAfter, request.InitialCredits, planNames);
+        }
+        else
+        {
+            await _activityLogService.LogResellerCreatedAsync(
+                adminId, reseller.Id, request.UserName,
+                tenantId, actorRole, actorUserName,
+                creditsBefore, creditsAfter, request.InitialCredits, planNames);
+        }
+
         await _auditService.LogAsync("ResellerCreated", 
             $"Reseller creado: {request.UserName} por {User.Identity?.Name}", 
-            ClaimsHelper.GetCurrentUserId(User), ClaimsHelper.GetCurrentTenantId(User));
+            adminId, tenantId);
 
         return Ok(new { Message = "Reseller creado", UserId = reseller.Id });
     }
@@ -252,9 +298,12 @@ public class UserController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> LoadCredits(Guid id, [FromBody] LoadCreditsRequest request)
     {
+        var actorUserId = ClaimsHelper.GetCurrentUserId(User);
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
-        // Delegamos al servicio de créditos que ya maneja la auditoría correctamente
-        var result = await _creditService.AddCreditsAsync(id, request.Amount, tenantId);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
+
+        var result = await _creditService.AddCreditsAsync(id, request.Amount, tenantId, actorUserId, actorRole, actorUserName);
         
         return result.Success ? Ok(result) : BadRequest(result);
     }
@@ -269,9 +318,15 @@ public class UserController : ControllerBase
     {
         var parentId = ClaimsHelper.GetCurrentUserId(User);
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
 
         var (successCount, failCount, errors) = await _bulkService.BulkExtendServiceAsync(
-            parentId, tenantId, request.UserIds, request.Days);
+            parentId, tenantId, request.UserIds, request.Days, parentId, actorRole, actorUserName);
+
+        await _activityLogService.LogBulkOperationAsync(
+            parentId, tenantId, actorRole, actorUserName,
+            "BulkExtendService", request.UserIds.Count, successCount, failCount);
 
         return Ok(new
         {
@@ -288,9 +343,15 @@ public class UserController : ControllerBase
     {
         var parentId = ClaimsHelper.GetCurrentUserId(User);
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
 
         var (successCount, failCount, errors) = await _bulkService.BulkDeleteAsync(
-            parentId, tenantId, request.UserIds);
+            parentId, tenantId, request.UserIds, parentId, actorRole, actorUserName);
+
+        await _activityLogService.LogBulkOperationAsync(
+            parentId, tenantId, actorRole, actorUserName,
+            "BulkDelete", request.UserIds.Count, successCount, failCount);
 
         return Ok(new
         {
@@ -347,12 +408,21 @@ public class UserController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> ToggleSuspend(Guid id)
     {
+        var actorUserId = ClaimsHelper.GetCurrentUserId(User);
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
+
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
         if (user == null) return NotFound(new { Message = "Usuario no encontrado." });
 
         user.IsActive = !user.IsActive;
         await _context.SaveChangesAsync();
+
+        await _activityLogService.LogUserSuspendedAsync(
+            actorUserId, user.Id, user.UserName,
+            tenantId, actorRole, actorUserName, !user.IsActive);
+
         return Ok(new { Message = user.IsActive ? "Usuario activado" : "Usuario suspendido", IsActive = user.IsActive });
     }
 
@@ -360,11 +430,16 @@ public class UserController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeleteUser(Guid id)
     {
+        var actorUserId = ClaimsHelper.GetCurrentUserId(User);
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
+
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
         if (user == null) return NotFound(new { Message = "Usuario no encontrado." });
 
-        // Eliminar subordinados y accesos
+        var deletedUserName = user.UserName;
+
         var subordinates = _context.Users.Where(u => u.ParentId == id);
         _context.Users.RemoveRange(subordinates);
         _context.NodeAccesses.RemoveRange(_context.NodeAccesses.Where(na => na.UserId == id));
@@ -372,6 +447,11 @@ public class UserController : ControllerBase
 
         _context.Users.Remove(user);
         await _context.SaveChangesAsync();
+
+        await _activityLogService.LogUserDeletedAsync(
+            actorUserId, user.Id, deletedUserName,
+            tenantId, actorRole, actorUserName);
+
         return Ok(new { Message = "Usuario eliminado" });
     }
 

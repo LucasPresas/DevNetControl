@@ -24,6 +24,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
     public DbSet<Notification> Notifications { get; set; }
+    public DbSet<ActivityLog> ActivityLogs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -33,7 +34,37 @@ public class ApplicationDbContext : DbContext
         var tenantId = _currentTenantId ?? Guid.Empty;
         bool hasTenant = _currentTenantId.HasValue;
 
+        modelBuilder.Entity<User>()
+            .HasOne(u => u.Parent)
+            .WithMany(u => u.Subordinates)
+            .HasForeignKey(u => u.ParentId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<User>()
+            .HasOne(u => u.Tenant)
+            .WithMany(t => t.Users)
+            .HasForeignKey(u => u.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<User>()
+            .HasOne(u => u.Plan)
+            .WithMany(p => p.Users)
+            .HasForeignKey(u => u.PlanId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         modelBuilder.Entity<User>().HasQueryFilter(e => !hasTenant || e.TenantId == tenantId);
+
+        modelBuilder.Entity<CreditTransaction>()
+            .HasOne(ct => ct.SourceUser)
+            .WithMany()
+            .HasForeignKey(ct => ct.SourceUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<CreditTransaction>()
+            .HasOne(ct => ct.TargetUser)
+            .WithMany()
+            .HasForeignKey(ct => ct.TargetUserId)
+            .OnDelete(DeleteBehavior.SetNull);
         
         // CORRECCIÓN CS8073: Usamos Guid.Empty para representar planes/nodos globales[cite: 1]
         modelBuilder.Entity<VpsNode>().HasQueryFilter(e => !hasTenant || e.TenantId == tenantId || e.TenantId == Guid.Empty);
@@ -41,6 +72,12 @@ public class ApplicationDbContext : DbContext
         
         modelBuilder.Entity<CreditTransaction>().HasQueryFilter(e => !hasTenant || e.TenantId == tenantId);
         modelBuilder.Entity<SessionLog>().HasQueryFilter(e => !hasTenant || e.TenantId == tenantId);
+
+        modelBuilder.Entity<SessionLog>()
+            .HasOne(sl => sl.User)
+            .WithMany(sl => sl.Sessions)
+            .HasForeignKey(sl => sl.UserId)
+            .OnDelete(DeleteBehavior.SetNull);
         
         modelBuilder.Entity<NodeAccess>().HasQueryFilter(e => !hasTenant || e.Node.TenantId == tenantId);
         modelBuilder.Entity<PlanAccess>().HasQueryFilter(e => !hasTenant || e.Plan.TenantId == tenantId);
@@ -66,5 +103,31 @@ public class ApplicationDbContext : DbContext
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<Notification>().HasQueryFilter(e => !hasTenant || e.TenantId == tenantId);
+
+        modelBuilder.Entity<ActivityLog>()
+            .HasOne(al => al.ActorUser)
+            .WithMany()
+            .HasForeignKey(al => al.ActorUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ActivityLog>()
+            .HasOne(al => al.TargetUser)
+            .WithMany()
+            .HasForeignKey(al => al.TargetUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<ActivityLog>()
+            .HasOne(al => al.Plan)
+            .WithMany()
+            .HasForeignKey(al => al.PlanId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<ActivityLog>()
+            .HasOne(al => al.Node)
+            .WithMany()
+            .HasForeignKey(al => al.NodeId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<ActivityLog>().HasQueryFilter(e => !hasTenant || e.TenantId == tenantId);
     }
 }

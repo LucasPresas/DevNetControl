@@ -3,6 +3,7 @@ using System;
 using DevNetControl.Api.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260503163735_AddCreditTransactionBalanceSnapshots")]
+    partial class AddCreditTransactionBalanceSnapshots
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.7");
@@ -452,6 +455,9 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("PlanId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("PlanId1")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Role")
                         .HasColumnType("INTEGER");
 
@@ -459,6 +465,9 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("TenantId1")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("TrialExpiry")
@@ -474,7 +483,11 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("PlanId");
 
+                    b.HasIndex("PlanId1");
+
                     b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId1");
 
                     b.ToTable("Users");
                 });
@@ -704,15 +717,23 @@ namespace DevNetControl.Api.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("DevNetControl.Api.Domain.Plan", "Plan")
-                        .WithMany("Users")
+                        .WithMany()
                         .HasForeignKey("PlanId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("DevNetControl.Api.Domain.Tenant", "Tenant")
+                    b.HasOne("DevNetControl.Api.Domain.Plan", null)
                         .WithMany("Users")
+                        .HasForeignKey("PlanId1");
+
+                    b.HasOne("DevNetControl.Api.Domain.Tenant", "Tenant")
+                        .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("DevNetControl.Api.Domain.Tenant", null)
+                        .WithMany("Users")
+                        .HasForeignKey("TenantId1");
 
                     b.Navigation("Parent");
 

@@ -13,6 +13,21 @@ public record TransferRequest(Guid ToUserId, decimal Amount);
 public record AddCreditsRequest(decimal Amount);
 public record CreditTransactionDto(Guid Id, string SourceUserName, string? TargetUserName, decimal Amount, string Type, string Direction, DateTime Timestamp);
 
+public record CreditTransactionWithBalanceDto(
+    Guid Id,
+    string SourceUserName,
+    string? TargetUserName,
+    decimal Amount,
+    string Type,
+    string Direction,
+    DateTime Timestamp,
+    decimal? SourceBalanceBefore,
+    decimal? SourceBalanceAfter,
+    decimal? TargetBalanceBefore,
+    decimal? TargetBalanceAfter,
+    string? Note
+);
+
 // Planes
 public record CreatePlanRequest(string Name, int DurationHours, decimal CreditCost, int MaxConnections, int MaxDevices);
 public record UpdatePlanRequest(string? Name, int? DurationHours, decimal? CreditCost);
@@ -48,3 +63,62 @@ public record LoadCreditsRequest(decimal Amount);
   public record RevokePlanAccessRequest(Guid UserId, Guid PlanId);
   public record MyNodesRequest();
   public record UpdateUserPlansRequest(List<Guid> PlanIds);
+
+// Activity Logs
+public record ActivityLogDto(
+    Guid Id,
+    string ActionType,
+    Guid ActorUserId,
+    string ActorUserName,
+    string ActorRole,
+    Guid? TargetUserId,
+    string? TargetUserName,
+    decimal CreditsConsumed,
+    decimal CreditsBalanceBefore,
+    decimal CreditsBalanceAfter,
+    string Description,
+    string? Details,
+    Guid? PlanId,
+    string? PlanName,
+    Guid? NodeId,
+    string? NodeLabel,
+    DateTime Timestamp
+);
+
+public record ActivityLogDetailDto(
+    Guid Id,
+    string ActionType,
+    Guid ActorUserId,
+    string ActorUserName,
+    string ActorRole,
+    Guid? TargetUserId,
+    string? TargetUserName,
+    decimal CreditsConsumed,
+    decimal CreditsBalanceBefore,
+    decimal CreditsBalanceAfter,
+    string Description,
+    string? Details,
+    Guid? PlanId,
+    string? PlanName,
+    Guid? NodeId,
+    string? NodeLabel,
+    DateTime Timestamp,
+    decimal? SourceBalanceBefore,
+    decimal? SourceBalanceAfter,
+    decimal? TargetBalanceBefore,
+    decimal? TargetBalanceAfter
+);
+
+public record ActivityStatsDto(
+    int TotalActivities,
+    int UniqueActors,
+    int ActivitiesLast24Hours,
+    int ActivitiesToday,
+    List<ActionCountDto> TopActions,
+    List<RoleCountDto> ActivitiesByRole,
+    decimal TotalCreditsConsumed,
+    DateTime Timestamp
+);
+
+public record ActionCountDto(string ActionType, int Count);
+public record RoleCountDto(string Role, int Count);

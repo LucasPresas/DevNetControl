@@ -26,20 +26,57 @@ public class AuditController : ControllerBase
         var transactions = await _context.CreditTransactions
             .Include(t => t.SourceUser)
             .Include(t => t.TargetUser)
-            .Where(t => t.SourceUser.TenantId == tenantId)
+            .Where(t => t.TenantId == tenantId)
             .OrderByDescending(t => t.CreatedAt)
-            .Select(t => new CreditTransactionDto(
+            .Select(t => new CreditTransactionWithBalanceDto(
                 t.Id,
-                t.SourceUser.UserName,
+                t.SourceUser != null ? t.SourceUser.UserName : "Sistema",
                 t.TargetUser != null ? t.TargetUser.UserName : "Sistema",
                 t.Amount,
                 t.Type.ToString(),
                 t.SourceUserId == currentUserId ? "Sent" : "Received",
-                t.CreatedAt
+                t.CreatedAt,
+                t.SourceBalanceBefore,
+                t.SourceBalanceAfter,
+                t.TargetBalanceBefore,
+                t.TargetBalanceAfter,
+                t.Note
             ))
             .ToListAsync();
 
         return Ok(transactions);
+    }
+
+    [HttpGet("history/summary")]
+    public async Task<IActionResult> GetCreditHistorySummary()
+    {
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+
+        var totalConsumed = await _context.CreditTransactions
+            .Where(ct => ct.TenantId == tenantId &&
+                        ct.Type != CreditTransactionType.AdminCredit &&
+                        ct.Type != CreditTransactionType.Refund)
+            .SumAsync(ct => ct.Amount);
+
+        var totalAdded = await _context.CreditTransactions
+            .Where(ct => ct.TenantId == tenantId && ct.Type == CreditTransactionType.AdminCredit)
+            .SumAsync(ct => ct.Amount);
+
+        var totalTransfers = await _context.CreditTransactions
+            .CountAsync(ct => ct.TenantId == tenantId && ct.Type == CreditTransactionType.Transfer);
+
+        var totalPlanPurchases = await _context.CreditTransactions
+            .CountAsync(ct => ct.TenantId == tenantId && ct.Type == CreditTransactionType.PlanPurchase);
+
+        return Ok(new
+        {
+            TotalConsumed = totalConsumed,
+            TotalAdded = totalAdded,
+            NetBalance = totalAdded - totalConsumed,
+            TotalTransfers = totalTransfers,
+            TotalPlanPurchases = totalPlanPurchases,
+            Timestamp = DateTime.UtcNow
+        });
     }
 
     [HttpGet("logs")]

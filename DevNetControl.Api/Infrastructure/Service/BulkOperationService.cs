@@ -14,15 +14,18 @@ public class BulkOperationService
     private readonly ApplicationDbContext _context;
     private readonly CreditService _creditService;
     private readonly NotificationService _notificationService;
+    private readonly ActivityLogService _activityLogService;
 
     public BulkOperationService(
         ApplicationDbContext context,
         CreditService creditService,
-        NotificationService notificationService)
+        NotificationService notificationService,
+        ActivityLogService activityLogService)
     {
         _context = context;
         _creditService = creditService;
         _notificationService = notificationService;
+        _activityLogService = activityLogService;
     }
 
     /// <summary>
@@ -62,7 +65,6 @@ public class BulkOperationService
                 continue;
             }
 
-            // Reutilizar lógica de UserProvisioningService (simulada aquí por simplicidad)
             var result = await CreateUserInternalAsync(parentId, tenantId, userName, password, planId, null);
             if (result.Success)
             {
@@ -138,7 +140,7 @@ public class BulkOperationService
     /// Extiende el servicio de múltiples usuarios en lote.
     /// </summary>
     public async Task<(int SuccessCount, int FailCount, List<string> Errors)> BulkExtendServiceAsync(
-        Guid parentId, Guid tenantId, List<Guid> userIds, int days)
+        Guid parentId, Guid tenantId, List<Guid> userIds, int days, Guid actorUserId, string actorRole, string actorUserName)
     {
         var successCount = 0;
         var failCount = 0;
@@ -154,7 +156,6 @@ public class BulkOperationService
                 continue;
             }
 
-            // Verificar jerarquía: solo el padre directo o Admin puede extender
             var parent = await _context.Users.FindAsync(parentId);
             if (parent == null)
             {
@@ -175,6 +176,11 @@ public class BulkOperationService
         }
 
         await _context.SaveChangesAsync();
+
+        await _activityLogService.LogServiceExtendedAsync(
+            actorUserId, parentId, $"Operación masiva ({userIds.Count} usuarios)",
+            tenantId, actorRole, actorUserName, days);
+
         return (successCount, failCount, errors);
     }
 
@@ -182,7 +188,7 @@ public class BulkOperationService
     /// Elimina múltiples usuarios en lote.
     /// </summary>
     public async Task<(int SuccessCount, int FailCount, List<string> Errors)> BulkDeleteAsync(
-        Guid parentId, Guid tenantId, List<Guid> userIds)
+        Guid parentId, Guid tenantId, List<Guid> userIds, Guid actorUserId, string actorRole, string actorUserName)
     {
         var successCount = 0;
         var failCount = 0;
@@ -198,7 +204,6 @@ public class BulkOperationService
                 continue;
             }
 
-            // Verificar jerarquía
             var parent = await _context.Users.FindAsync(parentId);
             if (parent == null)
             {
@@ -219,6 +224,11 @@ public class BulkOperationService
         }
 
         await _context.SaveChangesAsync();
+
+        await _activityLogService.LogBulkOperationAsync(
+            actorUserId, tenantId, actorRole, actorUserName,
+            "BulkDelete", userIds.Count, successCount, failCount);
+
         return (successCount, failCount, errors);
     }
 }

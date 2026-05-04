@@ -9,15 +9,19 @@ public class CreditTransaction
     [Required]
     public Guid TenantId { get; set; } 
 
-    [Required]
-    public Guid SourceUserId { get; set; } 
-    public User SourceUser { get; set; } = null!;
+    public Guid? SourceUserId { get; set; } 
+    public User? SourceUser { get; set; }
 
     public Guid? TargetUserId { get; set; } 
     public User? TargetUser { get; set; }
 
     [Required]
     public decimal Amount { get; set; }
+
+    public decimal? SourceBalanceBefore { get; set; }
+    public decimal? SourceBalanceAfter { get; set; }
+    public decimal? TargetBalanceBefore { get; set; }
+    public decimal? TargetBalanceAfter { get; set; }
 
     [Required]
     public CreditTransactionType Type { get; set; }

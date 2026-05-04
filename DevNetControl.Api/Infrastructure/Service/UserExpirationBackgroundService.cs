@@ -87,6 +87,38 @@ public class UserExpirationBackgroundService : BackgroundService
                     TenantId = user.TenantId
                 });
 
+                var subordinates = await context.Users
+                    .Where(u => u.ParentId == user.Id)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var sub in subordinates)
+                {
+                    sub.ParentId = null;
+                }
+
+                var sessions = await context.SessionLogs
+                    .Where(s => s.UserId == user.Id)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var session in sessions)
+                {
+                    session.UserId = null;
+                }
+
+                var nodeAccesses = await context.NodeAccesses
+                    .Where(na => na.UserId == user.Id)
+                    .ToListAsync(cancellationToken);
+
+                context.NodeAccesses.RemoveRange(nodeAccesses);
+
+                var planAccesses = await context.PlanAccesses
+                    .Where(pa => pa.UserId == user.Id)
+                    .ToListAsync(cancellationToken);
+
+                context.PlanAccesses.RemoveRange(planAccesses);
+
+                await context.SaveChangesAsync(cancellationToken);
+
                 context.Users.Remove(user);
                 await context.SaveChangesAsync(cancellationToken);
 

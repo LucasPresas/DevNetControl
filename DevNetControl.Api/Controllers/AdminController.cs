@@ -17,12 +17,14 @@ public class AdminController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly CreditService _creditService;
     private readonly NotificationService _notificationService;
+    private readonly ActivityLogService _activityLogService;
 
-    public AdminController(ApplicationDbContext context, CreditService creditService, NotificationService notificationService)
+    public AdminController(ApplicationDbContext context, CreditService creditService, NotificationService notificationService, ActivityLogService activityLogService)
     {
         _context = context;
         _creditService = creditService;
         _notificationService = notificationService;
+        _activityLogService = activityLogService;
     }
 
     [HttpGet("dashboard-data")]
@@ -109,22 +111,38 @@ public class AdminController : ControllerBase
     [HttpPut("users/{id}")]
     public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserRequest request)
     {
+        var actorUserId = ClaimsHelper.GetCurrentUserId(User);
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
 
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
         if (user == null)
             return NotFound(new { Message = "Usuario no encontrado o fuera de su jurisdicción" });
 
+        var changes = new List<string>();
+
         if (request.Role.HasValue)
+        {
+            changes.Add($"Rol: {user.Role} -> {request.Role.Value}");
             user.Role = request.Role.Value;
+        }
 
         if (request.Credits.HasValue)
         {
             if (request.Credits.Value < 0) return BadRequest(new { Message = "Los créditos no pueden ser negativos" });
+            changes.Add($"Créditos: {user.Credits} -> {request.Credits.Value}");
             user.Credits = request.Credits.Value;
         }
 
         await _context.SaveChangesAsync();
+
+        if (changes.Count > 0)
+        {
+            await _activityLogService.LogUserUpdatedAsync(
+                actorUserId, user.Id, user.UserName,
+                tenantId, actorRole, actorUserName, string.Join(", ", changes));
+        }
 
         return Ok(new { Message = "Usuario actualizado correctamente" });
     }
@@ -157,13 +175,28 @@ public class AdminController : ControllerBase
     [HttpPost("users/{id}/add-credits")]
     public async Task<IActionResult> AddCredits(Guid id, [FromBody] AddCreditsRequest request)
     {
+        var actorUserId = ClaimsHelper.GetCurrentUserId(User);
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
+
+        var targetUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
+        if (targetUser == null)
+            return NotFound(new { Message = "Usuario no encontrado" });
+
+        var creditsBefore = targetUser.Credits;
         
-        // Llamada corregida para usar la nueva firma de 3 argumentos
-        var result = await _creditService.AddCreditsAsync(id, request.Amount, tenantId);
+        var result = await _creditService.AddCreditsAsync(id, request.Amount, tenantId, actorUserId, actorRole, actorUserName);
 
         if (!result.Success)
             return BadRequest(new { Message = result.Message });
+
+        var creditsAfter = creditsBefore + request.Amount;
+
+        await _activityLogService.LogCreditsLoadedAsync(
+            actorUserId, id, targetUser.UserName,
+            tenantId, actorRole, actorUserName,
+            request.Amount, creditsBefore, creditsAfter);
 
         return Ok(new { Message = result.Message });
     }
