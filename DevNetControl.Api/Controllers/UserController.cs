@@ -435,6 +435,32 @@ public class UserController : ControllerBase
         return Ok(new { Message = user.IsActive ? "Usuario activado" : "Usuario suspendido", IsActive = user.IsActive });
     }
 
+    [HttpPost("{id}/suspend")]
+    [Authorize(Policy = "SubResellerOrAbove")]
+    public async Task<IActionResult> SuspendUser(Guid id)
+    {
+        var actorUserId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
+        if (user == null) return NotFound(new { Message = "Usuario no encontrado." });
+
+        // Verificar jerarquía: solo el padre directo o Admin pueden hacerlo
+        if (actorRole != "Admin" && actorRole != "SuperAdmin" && user.ParentId != actorUserId)
+            return Forbid();
+
+        user.IsActive = !user.IsActive;
+        await _context.SaveChangesAsync();
+
+        await _activityLogService.LogUserSuspendedAsync(
+            actorUserId, user.Id, user.UserName,
+            tenantId, actorRole, actorUserName, !user.IsActive);
+
+        return Ok(new { Message = user.IsActive ? "Usuario activado" : "Usuario suspendido", IsActive = user.IsActive });
+    }
+
     [HttpPost("{id}/add-connection")]
     [Authorize(Policy = "SubResellerOrAbove")]
     public async Task<IActionResult> AddConnection(Guid id, [FromBody] AddConnectionRequest request)
