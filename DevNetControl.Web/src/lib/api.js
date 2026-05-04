@@ -27,4 +27,23 @@ api.interceptors.response.use(
   }
 )
 
+// ===== Activity Logs =====
+export const getActivities = (params = {}) => api.get('/activity', { params })
+export const getRecentActivities = (limit = 10) => api.get('/activity/recent', { params: { limit } })
+export const getActivityDetail = (id) => api.get(`/activity/${id}`)
+export const getActivitiesByUser = (userId, params = {}) => api.get(`/activity/user/${userId}`, { params })
+export const getActivityStats = () => api.get('/activity/stats')
+export const getCreditsSummary = (params = {}) => api.get('/activity/credits/summary', { params })
+
+// ===== User Operations (Admin/SubReseller) =====
+export const addConnection = (userId, data) => api.post(`/user/${userId}/add-connection`, data)
+export const renewPlan = (userId, data) => api.post(`/user/${userId}/renew-plan`, data)
+export const updateUserBasic = (userId, data) => api.put(`/admin/users/${userId}/update-basic`, data)
+
+// ===== Credits Summary (from AuditController) =====
+export const getCreditHistorySummary = () => api.get('/audit/history/summary')
+
+// ===== Plans =====
+export const getPlans = () => api.get('/plan')
+
 export default api

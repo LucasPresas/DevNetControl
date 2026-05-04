@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import api from '../lib/api'
-import { Wallet, ArrowUpRight, ArrowDownRight, Send, Loader2, Check, X, RefreshCw } from 'lucide-react'
+import api, { getCreditHistorySummary, getCreditsSummary } from '../lib/api'
+import { Wallet, ArrowUpRight, ArrowDownRight, Send, Loader2, Check, X, RefreshCw, TrendingDown, TrendingUp, DollarSign } from 'lucide-react'
 
 const TYPE_LABELS = {
   0: { label: 'Transferencia', color: 'text-[var(--text-secondary)]' },
@@ -14,6 +14,7 @@ const TYPE_LABELS = {
 export default function Credits() {
   const [balance, setBalance] = useState(0)
   const [history, setHistory] = useState([])
+  const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showTransfer, setShowTransfer] = useState(false)
   const [form, setForm] = useState({ toUserId: '', amount: '' })
@@ -26,12 +27,14 @@ export default function Credits() {
 
   async function fetchData() {
     try {
-      const [balanceRes, historyRes] = await Promise.all([
+      const [balanceRes, historyRes, summaryRes] = await Promise.all([
         api.get('/credit/balance'),
         api.get('/credit/history'),
+        getCreditHistorySummary().catch(() => null),
       ])
       setBalance(balanceRes.data.balance)
       setHistory(historyRes.data)
+      if (summaryRes?.data) setSummary(summaryRes.data)
     } catch (err) {
       console.error('Error:', err)
     } finally {
@@ -80,6 +83,43 @@ export default function Credits() {
           Transferir
         </button>
       </div>
+
+      {/* Summary Cards */}
+      {summary && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Total Consumido</span>
+              <div className="p-2 rounded-lg bg-red-500/10">
+                <TrendingDown className="w-4 h-4 text-red-500" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-red-400">{summary.totalConsumed?.toLocaleString() || 0}</p>
+          </div>
+
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Total Agregado</span>
+              <div className="p-2 rounded-lg bg-green-500/10">
+                <TrendingUp className="w-4 h-4 text-green-500" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-green-400">{summary.totalAdded?.toLocaleString() || 0}</p>
+          </div>
+
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Balance Neto</span>
+              <div className="p-2 rounded-lg bg-yellow-500/10">
+                <DollarSign className="w-4 h-4 text-yellow-500" />
+              </div>
+            </div>
+            <p className={`text-2xl font-bold ${summary.netBalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {summary.netBalance?.toLocaleString() || 0}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Balance Card */}
       <div className="card p-6 bg-gradient-to-br from-blue-600/20 to-blue-900/10 border-blue-500/30">
@@ -141,8 +181,12 @@ export default function Credits() {
           <div className="divide-y divide-[var(--border-color)]">
             {history.map((tx) => {
               const typeInfo = TYPE_LABELS[tx.type] || TYPE_LABELS[0]
+              const sourceBefore = tx.sourceBalanceBefore ?? 0
+              const sourceAfter = tx.sourceBalanceAfter ?? 0
+              const targetBefore = tx.targetBalanceBefore ?? 0
+              const targetAfter = tx.targetBalanceAfter ?? 0
               return (
-                <div key={tx.id} className="px-4 py-2.5 flex items-center justify-between">
+                <div key={tx.id} className="px-4 py-2.5 flex items-start justify-between">
                   <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full ${tx.direction === 'Received' ? 'bg-green-500' : 'bg-red-500'}`} />
                     <div>
@@ -154,6 +198,17 @@ export default function Credits() {
                           {new Date(tx.timestamp).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </span>
                         <span className={`text-xs ${typeInfo.color}`}>{typeInfo.label}</span>
+                      </div>
+                      {tx.note && (
+                        <p className="text-xs text-[var(--text-muted)] mt-1 max-w-[300px] truncate">{tx.note}</p>
+                      )}
+                      <div className="flex items-center gap-3 mt-1 text-xs text-[var(--text-muted)]">
+                        {tx.direction === 'Sent' && (
+                          <span>De: {sourceBefore} → {sourceAfter}</span>
+                        )}
+                        {tx.direction === 'Received' && (
+                          <span>Para: {targetBefore} → {targetAfter}</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -169,6 +224,34 @@ export default function Credits() {
           </div>
         )}
       </div>
+
+      {/* Admin Summary */}
+      {summary && (
+        <div className="card p-4">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-yellow-500" />
+            Resumen Detallado (Admin)
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div>
+              <p className="text-xs text-[var(--text-muted)]">Total Transferencias</p>
+              <p className="font-semibold text-[var(--text-primary)]">{summary.totalTransfers || 0}</p>
+            </div>
+            <div>
+              <p className="text-xs text-[var(--text-muted)]">Compras de Plan</p>
+              <p className="font-semibold text-[var(--text-primary)]">{summary.totalPlanPurchases || 0}</p>
+            </div>
+            <div>
+              <p className="text-xs text-[var(--text-muted)]">Consumido</p>
+              <p className="font-semibold text-red-400">{summary.totalConsumed?.toLocaleString() || 0}</p>
+            </div>
+            <div>
+              <p className="text-xs text-[var(--text-muted)]">Agregado</p>
+              <p className="font-semibold text-green-400">{summary.totalAdded?.toLocaleString() || 0}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

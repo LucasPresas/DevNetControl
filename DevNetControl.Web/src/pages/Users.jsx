@@ -3,8 +3,11 @@ import api from '../lib/api'
 import {
   UserPlus, Loader2, Search, Filter, Clock, Server,
   Calendar, Check, X, ChevronLeft, ChevronRight, Users as UsersIcon,
-  Trash2, PlusCircle, AlertTriangle
+  Trash2, PlusCircle, AlertTriangle, Pencil
 } from 'lucide-react'
+import EditUserModal from '../components/modals/EditUserModal'
+import AddConnectionsModal from '../components/modals/AddConnectionsModal'
+import RenewPlanModal from '../components/modals/RenewPlanModal'
 
 export default function Users() {
   const [users, setUsers] = useState([])
@@ -21,6 +24,12 @@ export default function Users() {
   const [showBulkExtend, setShowBulkExtend] = useState(false)
   const [bulkExtendDays, setBulkExtendDays] = useState(30)
   const [bulkLoading, setBulkLoading] = useState(false)
+
+  // Modal states
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showAddConnectionsModal, setShowAddConnectionsModal] = useState(false)
+  const [showRenewPlanModal, setShowRenewPlanModal] = useState(false)
+  const [selectedUser, setSelectedUser] = useState(null)
 
   useEffect(() => {
     fetchData()
@@ -41,6 +50,37 @@ export default function Users() {
     } finally {
       setLoading(false)
     }
+  }
+
+  function handleToggleActive(user) {
+    if (!confirm(`¿${user.isActive ? 'Suspender' : 'Activar'} a ${user.userName}?`)) return
+    api.post(`/user/${user.id}/suspend`)
+      .then(({ data }) => {
+        setMessage({ type: 'success', text: data.message })
+        fetchData()
+      })
+      .catch(err => {
+        setMessage({ type: 'error', text: err.response?.data?.message || 'Error al cambiar estado' })
+      })
+  }
+
+  function openEditModal(user) {
+    setSelectedUser(user)
+    setShowEditModal(true)
+  }
+
+  function openAddConnectionsModal(user) {
+    setSelectedUser(user)
+    setShowAddConnectionsModal(true)
+  }
+
+  function openRenewPlanModal(user) {
+    setSelectedUser(user)
+    setShowRenewPlanModal(true)
+  }
+
+  function handleModalSuccess() {
+    fetchData()
   }
 
   async function handleSubmit(e) {
@@ -342,25 +382,28 @@ export default function Users() {
         <div className="table-container overflow-x-auto">
           <table className="table">
             <thead>
-              <tr>
-                <th className="w-10">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.length === filteredUsers.length && filteredUsers.length > 0}
-                    onChange={toggleSelectAll}
-                    className="w-4 h-4 rounded border-[var(--border-color)] bg-[var(--bg-primary)] text-blue-500 focus:ring-blue-500"
-                  />
-                </th>
-                <th>Usuario</th>
-                <th>Plan / Duracion</th>
-                <th>Disp</th>
-                <th>Vencimiento</th>
-                <th>Estado</th>
-                <th>Creditos</th>
-              </tr>
+                <tr>
+                  <th className="w-10">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.length === filteredUsers.length && filteredUsers.length > 0}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded border-[var(--border-color)] bg-[var(--bg-primary)] text-blue-500 focus:ring-blue-500"
+                    />
+                  </th>
+                  <th>Usuario</th>
+                  <th>Plan / Duracion</th>
+                  <th>Disp</th>
+                  <th>Conexiones</th>
+                  <th>Reseller</th>
+                  <th>Vencimiento</th>
+                  <th>Estado</th>
+                  <th>Creditos</th>
+                  <th>Acciones</th>
+                </tr>
             </thead>
             <tbody>
-              {filteredUsers.map(u => (
+                {filteredUsers.map(u => (
                 <tr key={u.id}>
                   <td>
                     <input
@@ -397,6 +440,11 @@ export default function Users() {
                     </div>
                   </td>
                   <td className="text-center text-[var(--text-secondary)]">{u.maxDevices || 1}</td>
+                  <td className="text-center text-[var(--text-secondary)]">
+                    {((u.plan?.maxConnections || 0) + (u.additionalConnections || 0))}
+                    <span className="text-xs text-[var(--text-muted)]"> ({(u.additionalConnections || 0)} extra)</span>
+                  </td>
+                  <td className="text-sm text-[var(--text-secondary)]">{u.resellerName || 'N/A'}</td>
                   <td>
                     <span className={`text-sm ${isExpired(u.serviceExpiry) ? 'text-red-400' : 'text-[var(--text-secondary)]'}`}>
                       <Calendar className="w-3.5 h-3.5 inline mr-1" />
@@ -412,12 +460,48 @@ export default function Users() {
                     }
                   </td>
                   <td className="font-semibold text-[var(--text-primary)]">{u.credits?.toLocaleString() ?? 0}</td>
+                  <td>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => openEditModal(u)} className="btn btn-sm btn-secondary" title="Editar usuario">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => openAddConnectionsModal(u)} className="btn btn-sm btn-secondary" title="Agregar conexiones">
+                        <PlusCircle className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => openRenewPlanModal(u)} className="btn btn-sm btn-secondary" title="Renovar plan">
+                        <Calendar className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => handleToggleActive(u)} className={`btn btn-sm ${u.isActive ? 'btn-secondary text-red-400' : 'btn-secondary text-green-400'}`} title={u.isActive ? 'Suspender' : 'Activar'}>
+                        {u.isActive ? <X className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      {/* Modales */}
+      <EditUserModal
+        show={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        user={selectedUser}
+        onSuccess={handleModalSuccess}
+      />
+      <AddConnectionsModal
+        show={showAddConnectionsModal}
+        onClose={() => setShowAddConnectionsModal(false)}
+        user={selectedUser}
+        onSuccess={handleModalSuccess}
+      />
+      <RenewPlanModal
+        show={showRenewPlanModal}
+        onClose={() => setShowRenewPlanModal(false)}
+        user={selectedUser}
+        onSuccess={handleModalSuccess}
+      />
     </div>
   )
 }
