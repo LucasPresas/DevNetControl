@@ -31,6 +31,8 @@ namespace DevNetControl.Api.Domain
         public Guid? PlanId { get; set; }
         public Plan? Plan { get; set; }
 
+        public int AdditionalConnections { get; set; } = 0;
+
         public Guid? ParentId { get; set; }
         public User? Parent { get; set; }
         public ICollection<User> Subordinates { get; set; } = new List<User>();

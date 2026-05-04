@@ -33,7 +33,7 @@ public class ActivityLogService
             PlanId = planId,
             PlanName = planName,
             TenantId = tenantId,
-            Description = $"Usuario '{targetUserName}' creado con plan '{planName}'"
+            Description = $"**{actorUserName}** creó el usuario '{targetUserName}' con el plan '{planName}'. Balance: {creditsAfter}"
         };
 
         _context.ActivityLogs.Add(log);
@@ -341,6 +341,31 @@ public class ActivityLogService
                 SuccessCount = successCount,
                 FailCount = failCount
             })
+        };
+
+        _context.ActivityLogs.Add(log);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task LogCreditsConsumedAsync(
+        Guid actorUserId, Guid targetUserId, string targetUserName,
+        Guid tenantId, string actorRole, string actorUserName,
+        decimal creditsConsumed, decimal creditsBefore, decimal creditsAfter,
+        string description)
+    {
+        var log = new ActivityLog
+        {
+            ActionType = ActivityActionType.CreditsConsumed,
+            ActorUserId = actorUserId,
+            ActorUserName = actorUserName,
+            ActorRole = actorRole,
+            TargetUserId = targetUserId,
+            TargetUserName = targetUserName,
+            CreditsConsumed = creditsConsumed,
+            CreditsBalanceBefore = creditsBefore,
+            CreditsBalanceAfter = creditsAfter,
+            TenantId = tenantId,
+            Description = description
         };
 
         _context.ActivityLogs.Add(log);

@@ -36,9 +36,11 @@ public record ExtendServiceRequest(int Days, Guid NodeId);
 // Usuarios
 public record CreateUserRequest(string UserName, string Password, Guid? PlanId = null, Guid? NodeId = null);
 public record UpdateUserRequest(decimal? Credits, DevNetControl.Api.Domain.UserRole? Role);
-public record UpdateUserBasicRequest(string? UserName = null, string? Password = null);
+public record UpdateUserBasicRequest(string? UserName = null, string? Password = null, Guid? ParentId = null, int? MaxConnections = null);
 public record UpdateUserNodesRequest(List<Guid> NodeIds);
 public record RemoveFromVpsRequest(Guid NodeId);
+public record AddConnectionRequest(int ConnectionsToAdd = 1);
+public record RenewPlanRequest(Guid PlanId, int DurationHours);
 
 // Infraestructura
 public record CreateNodeRequest(string IP, int SshPort, string Label, string Password, decimal CreditCost);

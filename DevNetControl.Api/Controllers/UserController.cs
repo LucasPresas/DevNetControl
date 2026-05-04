@@ -200,8 +200,17 @@ public class UserController : ControllerBase
         var parentId = ClaimsHelper.GetCurrentUserId(User);
         var subUsers = await _context.Users
             .Where(u => u.ParentId == parentId)
+            .Include(u => u.Plan)
+            .Include(u => u.Parent)
             .Select(u => new {
-                u.Id, u.UserName, u.Credits, u.ServiceExpiry, u.IsActive,
+                u.Id,
+                u.UserName,
+                u.Credits,
+                u.ServiceExpiry,
+                u.IsActive,
+                Role = u.Role.ToString(),
+                ResellerName = u.Parent != null ? u.Parent.UserName : "N/A",
+                MaxConnections = u.Plan != null ? u.Plan.MaxConnections + u.AdditionalConnections : u.AdditionalConnections,
                 PlanName = u.Plan != null ? u.Plan.Name : "Sin Plan"
             }).ToListAsync();
 
@@ -424,6 +433,101 @@ public class UserController : ControllerBase
             tenantId, actorRole, actorUserName, !user.IsActive);
 
         return Ok(new { Message = user.IsActive ? "Usuario activado" : "Usuario suspendido", IsActive = user.IsActive });
+    }
+
+    [HttpPost("{id}/add-connection")]
+    [Authorize(Policy = "SubResellerOrAbove")]
+    public async Task<IActionResult> AddConnection(Guid id, [FromBody] AddConnectionRequest request)
+    {
+        var actorUserId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
+
+        var targetUser = await _context.Users
+            .Include(u => u.Plan)
+            .FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
+
+        if (targetUser == null)
+            return NotFound(new { Message = "Usuario no encontrado." });
+
+        // Verificar jerarquía: solo el padre directo o Admin pueden hacerlo
+        if (actorRole != "Admin" && actorRole != "SuperAdmin" && targetUser.ParentId != actorUserId)
+            return Forbid();
+
+        int connectionsToAdd = request.ConnectionsToAdd > 0 ? request.ConnectionsToAdd : 1;
+        decimal creditCost = connectionsToAdd;
+
+        if (targetUser.Credits < creditCost)
+            return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {creditCost} créditos." });
+
+        var creditsBefore = targetUser.Credits;
+        targetUser.Credits -= creditCost;
+        targetUser.AdditionalConnections += connectionsToAdd;
+
+        await _context.SaveChangesAsync();
+
+        await _activityLogService.LogCreditsConsumedAsync(
+            actorUserId, id, targetUser.UserName,
+            tenantId, actorRole, actorUserName,
+            creditCost, creditsBefore, targetUser.Credits,
+            $"Agregadas {connectionsToAdd} conexión(es) a {targetUser.UserName}");
+
+        return Ok(new
+        {
+            Message = $"Se agregaron {connectionsToAdd} conexión(es). Créditos gastados: {creditCost}",
+            NewMaxConnections = (targetUser.Plan?.MaxConnections ?? 0) + targetUser.AdditionalConnections,
+            RemainingCredits = targetUser.Credits
+        });
+    }
+
+    [HttpPost("{id}/renew-plan")]
+    [Authorize(Policy = "SubResellerOrAbove")]
+    public async Task<IActionResult> RenewPlan(Guid id, [FromBody] RenewPlanRequest request)
+    {
+        var actorUserId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
+
+        var targetUser = await _context.Users
+            .Include(u => u.Plan)
+            .FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
+
+        if (targetUser == null)
+            return NotFound(new { Message = "Usuario no encontrado." });
+
+        // Verificar jerarquía: solo el padre directo o Admin pueden hacerlo
+        if (actorRole != "Admin" && actorRole != "SuperAdmin" && targetUser.ParentId != actorUserId)
+            return Forbid();
+
+        var plan = await _context.Plans.FindAsync(request.PlanId);
+        if (plan == null)
+            return BadRequest(new { Message = "Plan no encontrado" });
+
+        if (targetUser.Credits < plan.CreditCost)
+            return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {plan.CreditCost} créditos." });
+
+        var creditsBefore = targetUser.Credits;
+        targetUser.Credits -= plan.CreditCost;
+        targetUser.PlanId = plan.Id;
+        targetUser.ServiceExpiry = DateTime.UtcNow.AddHours(request.DurationHours > 0 ? request.DurationHours : plan.DurationHours);
+
+        await _context.SaveChangesAsync();
+
+        await _activityLogService.LogCreditsConsumedAsync(
+            actorUserId, id, targetUser.UserName,
+            tenantId, actorRole, actorUserName,
+            plan.CreditCost, creditsBefore, targetUser.Credits,
+            $"Plan {plan.Name} renovado para {targetUser.UserName}. Duración: {request.DurationHours} horas");
+
+        return Ok(new
+        {
+            Message = $"Plan {plan.Name} renovado exitosamente. Expira: {targetUser.ServiceExpiry}",
+            PlanName = plan.Name,
+            ServiceExpiry = targetUser.ServiceExpiry,
+            RemainingCredits = targetUser.Credits
+        });
     }
 
     [HttpDelete("{id}")]

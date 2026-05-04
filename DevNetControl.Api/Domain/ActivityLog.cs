@@ -13,6 +13,7 @@ public enum ActivityActionType
     SubResellerCreated,
     CreditsTransferred,
     CreditsLoaded,
+    CreditsConsumed,
     PlanAssigned,
     PlanChanged,
     ServiceExtended,
