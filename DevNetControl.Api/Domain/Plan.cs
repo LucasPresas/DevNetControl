@@ -10,7 +10,7 @@ namespace DevNetControl.Api.Domain
         public string Name { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public int DurationHours { get; set; } = 720;
-        public decimal CreditCost { get; set; } = 0;
+        public int CreditCost { get; set; } = 0;
         public int MaxConnections { get; set; } = 1;
         public int MaxDevices { get; set; } = 1;
         public bool IsActive { get; set; } = true;

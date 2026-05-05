@@ -9,33 +9,33 @@ public record UpdateMyUserRequest(string? UserName, string? Password);
 public record RefreshTokenRequest(string AccessToken, string RefreshToken);
 
 // Créditos y Auditoría
-public record TransferRequest(Guid ToUserId, decimal Amount);
-public record AddCreditsRequest(decimal Amount);
-public record CreditTransactionDto(Guid Id, string SourceUserName, string? TargetUserName, decimal Amount, string Type, string Direction, DateTime Timestamp);
+public record TransferRequest(Guid ToUserId, int Amount);
+public record AddCreditsRequest(int Amount);
+public record CreditTransactionDto(Guid Id, string SourceUserName, string? TargetUserName, int Amount, string Type, string Direction, DateTime Timestamp);
 
 public record CreditTransactionWithBalanceDto(
     Guid Id,
     string SourceUserName,
     string? TargetUserName,
-    decimal Amount,
+    int Amount,
     string Type,
     string Direction,
     DateTime Timestamp,
-    decimal? SourceBalanceBefore,
-    decimal? SourceBalanceAfter,
-    decimal? TargetBalanceBefore,
-    decimal? TargetBalanceAfter,
+    int? SourceBalanceBefore,
+    int? SourceBalanceAfter,
+    int? TargetBalanceBefore,
+    int? TargetBalanceAfter,
     string? Note
 );
 
 // Planes
-public record CreatePlanRequest(string Name, int DurationHours, decimal CreditCost, int MaxConnections, int MaxDevices);
-public record UpdatePlanRequest(string? Name, int? DurationHours, decimal? CreditCost);
+public record CreatePlanRequest(string Name, int DurationHours, int CreditCost, int MaxConnections, int MaxDevices);
+public record UpdatePlanRequest(string? Name, int? DurationHours, int? CreditCost);
 public record ExtendServiceRequest(int Days, Guid NodeId);
 
 // Usuarios
 public record CreateUserRequest(string UserName, string Password, Guid? PlanId = null, Guid? NodeId = null);
-public record UpdateUserRequest(decimal? Credits, DevNetControl.Api.Domain.UserRole? Role);
+public record UpdateUserRequest(int? Credits, DevNetControl.Api.Domain.UserRole? Role);
 public record UpdateUserBasicRequest(string? UserName = null, string? Password = null, Guid? ParentId = null, int? MaxConnections = null, Guid? NodeId = null);
 public record UpdateUserNodesRequest(List<Guid> NodeIds);
 public record RemoveFromVpsRequest(Guid NodeId);
@@ -43,7 +43,7 @@ public record AddConnectionRequest(int ConnectionsToAdd = 1);
 public record RenewPlanRequest(Guid PlanId, int DurationHours);
 
   // Infraestructura
-  public record CreateNodeRequest(string IP, int SshPort, string Label, string Password, decimal CreditCost);
+  public record CreateNodeRequest(string IP, int SshPort, string Label, string Password, int CreditCost);
   public record UpdateNodeRequest(string? IP, int? SshPort, string? Label, string? Password);
   public record ExecuteCommandRequest(string Command);
   public record GrantNodeAccessRequest(Guid UserId, Guid NodeId);
@@ -51,12 +51,12 @@ public record RenewPlanRequest(Guid PlanId, int DurationHours);
 
 // Session Logs
 public record CreateSessionLogRequest(string Action, string Details, string? NodeIp = null);
-public record SessionLogDto(Guid Id, Guid? UserId, string UserName, string ClientIp, string NodeIp, string Action, string Details, DateTime Timestamp);
+public record SessionLogDto(Guid Id, Guid? UserId, string UserName, string ClientIp, string? UserAgent, string NodeIp, string Action, string Details, DateTime Timestamp);
 
 // Hierarchy & Resellers
-public record HierarchyNodeDto(Guid Id, string UserName, DevNetControl.Api.Domain.UserRole Role, decimal Credits, List<HierarchyNodeDto> Children);
-public record CreateResellerRequest(string UserName, string Password, List<Guid> PlanIds, bool IsSubReseller = false, decimal InitialCredits = 0);
-public record LoadCreditsRequest(decimal Amount);
+public record HierarchyNodeDto(Guid Id, string UserName, DevNetControl.Api.Domain.UserRole Role, int Credits, List<HierarchyNodeDto> Children);
+public record CreateResellerRequest(string UserName, string Password, List<Guid> PlanIds, bool IsSubReseller = false, int InitialCredits = 0);
+public record LoadCreditsRequest(int Amount);
 
   // Bulk Operations
   public record BulkCreateUsersRequest(IFormFile CsvFile);
@@ -78,9 +78,9 @@ public record ActivityLogDto(
     string ActorRole,
     Guid? TargetUserId,
     string? TargetUserName,
-    decimal CreditsConsumed,
-    decimal CreditsBalanceBefore,
-    decimal CreditsBalanceAfter,
+    int CreditsConsumed,
+    int CreditsBalanceBefore,
+    int CreditsBalanceAfter,
     string Description,
     string? Details,
     Guid? PlanId,
@@ -98,9 +98,9 @@ public record ActivityLogDetailDto(
     string ActorRole,
     Guid? TargetUserId,
     string? TargetUserName,
-    decimal CreditsConsumed,
-    decimal CreditsBalanceBefore,
-    decimal CreditsBalanceAfter,
+    int CreditsConsumed,
+    int CreditsBalanceBefore,
+    int CreditsBalanceAfter,
     string Description,
     string? Details,
     Guid? PlanId,
@@ -108,10 +108,10 @@ public record ActivityLogDetailDto(
     Guid? NodeId,
     string? NodeLabel,
     DateTime Timestamp,
-    decimal? SourceBalanceBefore,
-    decimal? SourceBalanceAfter,
-    decimal? TargetBalanceBefore,
-    decimal? TargetBalanceAfter
+    int? SourceBalanceBefore,
+    int? SourceBalanceAfter,
+    int? TargetBalanceBefore,
+    int? TargetBalanceAfter
 );
 
 public record ActivityStatsDto(
@@ -121,7 +121,7 @@ public record ActivityStatsDto(
     int ActivitiesToday,
     List<ActionCountDto> TopActions,
     List<RoleCountDto> ActivitiesByRole,
-    decimal TotalCreditsConsumed,
+    int TotalCreditsConsumed,
     DateTime Timestamp
 );
 

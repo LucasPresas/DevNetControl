@@ -19,7 +19,7 @@ namespace DevNetControl.Api.Domain
         public string UserName { get; set; } = string.Empty;
         public string PasswordHash { get; set; } = string.Empty;
         public UserRole Role { get; set; }
-        public decimal Credits { get; set; } = 0;
+        public int Credits { get; set; } = 0;
         public int MaxDevices { get; set; } = 1;
         public DateTime? ServiceExpiry { get; set; }
 

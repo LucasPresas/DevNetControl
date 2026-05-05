@@ -215,6 +215,6 @@ public class PlanController : ControllerBase
     }
 }
 
-public record PlanResponse(Guid Id, string Name, string Description, int DurationHours, decimal CreditCost, int MaxConnections, int MaxDevices, bool IsActive, bool IsTrial, int UsersCount);
-public record CreatePlanRequest(string Name, string? Description, int DurationHours, decimal CreditCost, int MaxConnections = 1, int MaxDevices = 1, bool IsTrial = false);
-public record UpdatePlanRequest(string? Name = null, string? Description = null, int? DurationHours = null, decimal? CreditCost = null, int? MaxConnections = null, int? MaxDevices = null, bool? IsActive = null);
+public record PlanResponse(Guid Id, string Name, string Description, int DurationHours, int CreditCost, int MaxConnections, int MaxDevices, bool IsActive, bool IsTrial, int UsersCount);
+public record CreatePlanRequest(string Name, string? Description, int DurationHours, int CreditCost, int MaxConnections = 1, int MaxDevices = 1, bool IsTrial = false);
+public record UpdatePlanRequest(string? Name = null, string? Description = null, int? DurationHours = null, int? CreditCost = null, int? MaxConnections = null, int? MaxDevices = null, bool? IsActive = null);

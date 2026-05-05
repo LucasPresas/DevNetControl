@@ -49,11 +49,11 @@ public class ActivityLog
     [MaxLength(100)]
     public string? TargetUserName { get; set; }
 
-    public decimal CreditsConsumed { get; set; }
+    public int CreditsConsumed { get; set; }
 
-    public decimal CreditsBalanceBefore { get; set; }
+    public int CreditsBalanceBefore { get; set; }
 
-    public decimal CreditsBalanceAfter { get; set; }
+    public int CreditsBalanceAfter { get; set; }
 
     [MaxLength(500)]
     public string Description { get; set; } = string.Empty;

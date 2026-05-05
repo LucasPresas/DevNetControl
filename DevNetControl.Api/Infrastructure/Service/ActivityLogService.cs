@@ -17,7 +17,7 @@ public class ActivityLogService
     public async Task LogUserCreatedAsync(
         Guid actorUserId, Guid targetUserId, string targetUserName,
         Guid tenantId, string actorRole, string actorUserName,
-        decimal creditsBefore, decimal creditsAfter, Guid? planId = null, string? planName = null)
+        int creditsBefore, int creditsAfter, Guid? planId = null, string? planName = null)
     {
         var log = new ActivityLog
         {
@@ -43,7 +43,7 @@ public class ActivityLogService
     public async Task LogResellerCreatedAsync(
         Guid actorUserId, Guid targetUserId, string targetUserName,
         Guid tenantId, string actorRole, string actorUserName,
-        decimal creditsBefore, decimal creditsAfter, decimal initialCreditsAssigned,
+        int creditsBefore, int creditsAfter, int initialCreditsAssigned,
         List<string> planNames)
     {
         var log = new ActivityLog
@@ -74,7 +74,7 @@ public class ActivityLogService
     public async Task LogSubResellerCreatedAsync(
         Guid actorUserId, Guid targetUserId, string targetUserName,
         Guid tenantId, string actorRole, string actorUserName,
-        decimal creditsBefore, decimal creditsAfter, decimal initialCreditsAssigned,
+        int creditsBefore, int creditsAfter, int initialCreditsAssigned,
         List<string> planNames)
     {
         var log = new ActivityLog
@@ -105,8 +105,8 @@ public class ActivityLogService
     public async Task LogCreditsTransferredAsync(
         Guid actorUserId, Guid targetUserId, string targetUserName,
         Guid tenantId, string actorRole, string actorUserName,
-        decimal amount, decimal sourceCreditsBefore, decimal sourceCreditsAfter,
-        decimal targetCreditsBefore, decimal targetCreditsAfter)
+        int amount, int sourceCreditsBefore, int sourceCreditsAfter,
+        int targetCreditsBefore, int targetCreditsAfter)
     {
         var log = new ActivityLog
         {
@@ -138,7 +138,7 @@ public class ActivityLogService
     public async Task LogCreditsLoadedAsync(
         Guid actorUserId, Guid targetUserId, string targetUserName,
         Guid tenantId, string actorRole, string actorUserName,
-        decimal amount, decimal targetCreditsBefore, decimal targetCreditsAfter)
+        int amount, int targetCreditsBefore, int targetCreditsAfter)
     {
         var log = new ActivityLog
         {
@@ -162,8 +162,8 @@ public class ActivityLogService
     public async Task LogPlanAssignedAsync(
         Guid actorUserId, Guid targetUserId, string targetUserName,
         Guid tenantId, string actorRole, string actorUserName,
-        Guid planId, string planName, decimal creditCost,
-        decimal creditsBefore, decimal creditsAfter)
+        Guid planId, string planName, int creditCost,
+        int creditsBefore, int creditsAfter)
     {
         var log = new ActivityLog
         {
@@ -350,7 +350,7 @@ public class ActivityLogService
     public async Task LogCreditsConsumedAsync(
         Guid actorUserId, Guid targetUserId, string targetUserName,
         Guid tenantId, string actorRole, string actorUserName,
-        decimal creditsConsumed, decimal creditsBefore, decimal creditsAfter,
+        int creditsConsumed, int creditsBefore, int creditsAfter,
         string description)
     {
         var log = new ActivityLog

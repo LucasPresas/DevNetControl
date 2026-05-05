@@ -14,7 +14,7 @@ namespace DevNetControl.Api.Domain
 
         public decimal TrialMaxHours { get; set; } = 2;
         public int TrialMaxPerReseller { get; set; } = 5;
-        public decimal CreditsPerDevice { get; set; } = 1;
+        public int CreditsPerDevice { get; set; } = 1;
 
         public ICollection<User> Users { get; set; } = new List<User>();
         public ICollection<VpsNode> VpsNodes { get; set; } = new List<VpsNode>();

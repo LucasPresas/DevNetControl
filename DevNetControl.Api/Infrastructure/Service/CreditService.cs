@@ -19,10 +19,10 @@ public class CreditService
     public async Task<decimal> GetBalanceAsync(Guid userId)
     {
         var user = await _context.Users.FindAsync(userId);
-        return user?.Credits ?? 0;
+        return user?.Credits ??0;
     }
 
-    public async Task<(bool Success, string Message)> TransferCreditsAsync(Guid sourceUserId, Guid targetUserId, decimal amount)
+    public async Task<(bool Success, string Message)> TransferCreditsAsync(Guid sourceUserId, Guid targetUserId, int amount)
     {
         if (amount <= 0) return (false, "Monto inválido.");
         var source = await _context.Users.FindAsync(sourceUserId);
@@ -73,7 +73,7 @@ public class CreditService
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            if (source.Role != UserRole.Admin && source.Credits <= 10m)
+            if (source.Role != UserRole.Admin && source.Credits <= 10)
                 await _notificationService.GenerateLowCreditAlertsAsync();
 
             return (true, "Transferencia exitosa.");
@@ -85,7 +85,7 @@ public class CreditService
         }
     }
 
-    public async Task<(bool Success, string Message)> AddCreditsAsync(Guid targetUserId, decimal amount, Guid tenantId, Guid? actorUserId = null, string? actorRole = null, string? actorUserName = null)
+    public async Task<(bool Success, string Message)> AddCreditsAsync(Guid targetUserId, int amount, Guid tenantId, Guid? actorUserId = null, string? actorRole = null, string? actorUserName = null)
     {
         var targetUser = await _context.Users.FindAsync(targetUserId);
         if (targetUser == null) return (false, "Usuario no encontrado.");
@@ -129,7 +129,7 @@ public class CreditService
 
         await _context.SaveChangesAsync();
 
-        if (targetUser.Credits <= 10m)
+        if (targetUser.Credits <= 10)
             await _notificationService.GenerateLowCreditAlertsAsync();
 
         return (true, "Créditos agregados correctamente.");

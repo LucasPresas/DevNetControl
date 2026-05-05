@@ -211,6 +211,12 @@ public class UserController : ControllerBase
                 Role = u.Role.ToString(),
                 ResellerName = u.Parent != null ? u.Parent.UserName : "N/A",
                 MaxConnections = u.Plan != null ? u.Plan.MaxConnections + u.AdditionalConnections : u.AdditionalConnections,
+                ActiveConnections = _context.SessionLogs.Count(sl => sl.UserId == u.Id),
+                LatestUserAgent = _context.SessionLogs
+                    .Where(sl => sl.UserId == u.Id && sl.UserAgent != null)
+                    .OrderByDescending(sl => sl.Timestamp)
+                    .Select(sl => sl.UserAgent)
+                    .FirstOrDefault(),
                 PlanName = u.Plan != null ? u.Plan.Name : "Sin Plan",
                 u.IsTrial,
                 u.IsProvisionedOnVps,
@@ -244,7 +250,7 @@ public class UserController : ControllerBase
         var creditsBefore = admin.Credits;
 
         var plans = await _context.Plans.Where(p => request.PlanIds.Contains(p.Id)).ToListAsync();
-        decimal totalCost = plans.Sum(p => p.CreditCost);
+        int totalCost = plans.Sum(p => p.CreditCost);
 
         if (admin.Credits < totalCost) return BadRequest("Créditos insuficientes para asignar estos planes.");
 
@@ -596,13 +602,33 @@ public class UserController : ControllerBase
             return Forbid();
 
         int connectionsToAdd = request.ConnectionsToAdd > 0 ? request.ConnectionsToAdd : 1;
-        decimal creditCost = connectionsToAdd;
+        int creditCost = connectionsToAdd;
 
-        if (targetUser.Credits < creditCost)
+        // Verificar créditos del actor (reseller), no del target
+        if (actorUserId != targetUser.Id)
+        {
+            var actor = await _context.Users.FindAsync(actorUserId);
+            if (actor != null && actor.Credits < creditCost)
+                return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {creditCost} créditos." });
+        }
+        else if (targetUser.Credits < creditCost)
+        {
             return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {creditCost} créditos." });
+        }
 
         var creditsBefore = targetUser.Credits;
-        targetUser.Credits -= creditCost;
+        if (actorUserId != targetUser.Id)
+        {
+            var actor = await _context.Users.FindAsync(actorUserId);
+            if (actor != null)
+            {
+                actor.Credits -= creditCost;
+            }
+        }
+        else
+        {
+            targetUser.Credits -= creditCost;
+        }
         targetUser.AdditionalConnections += connectionsToAdd;
 
         await _context.SaveChangesAsync();
@@ -645,11 +671,31 @@ public class UserController : ControllerBase
         if (plan == null)
             return BadRequest(new { Message = "Plan no encontrado" });
 
-        if (targetUser.Credits < plan.CreditCost)
+        // Verificar créditos del actor (reseller), no del target
+        if (actorUserId != targetUser.Id)
+        {
+            var actor = await _context.Users.FindAsync(actorUserId);
+            if (actor != null && actor.Credits < plan.CreditCost)
+                return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {plan.CreditCost} créditos." });
+        }
+        else if (targetUser.Credits < plan.CreditCost)
+        {
             return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {plan.CreditCost} créditos." });
+        }
 
         var creditsBefore = targetUser.Credits;
-        targetUser.Credits -= plan.CreditCost;
+        if (actorUserId != targetUser.Id)
+        {
+            var actor = await _context.Users.FindAsync(actorUserId);
+            if (actor != null)
+            {
+                actor.Credits -= plan.CreditCost;
+            }
+        }
+        else
+        {
+            targetUser.Credits -= plan.CreditCost;
+        }
         targetUser.PlanId = plan.Id;
         targetUser.ServiceExpiry = DateTime.UtcNow.AddHours(request.DurationHours > 0 ? request.DurationHours : plan.DurationHours);
 

@@ -16,12 +16,12 @@ public class CreditTransaction
     public User? TargetUser { get; set; }
 
     [Required]
-    public decimal Amount { get; set; }
+    public int Amount { get; set; }
 
-    public decimal? SourceBalanceBefore { get; set; }
-    public decimal? SourceBalanceAfter { get; set; }
-    public decimal? TargetBalanceBefore { get; set; }
-    public decimal? TargetBalanceAfter { get; set; }
+    public int? SourceBalanceBefore { get; set; }
+    public int? SourceBalanceAfter { get; set; }
+    public int? TargetBalanceBefore { get; set; }
+    public int? TargetBalanceAfter { get; set; }
 
     [Required]
     public CreditTransactionType Type { get; set; }

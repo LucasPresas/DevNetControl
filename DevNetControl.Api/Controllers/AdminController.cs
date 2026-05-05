@@ -224,13 +224,33 @@ public class AdminController : ControllerBase
             return NotFound(new { Message = "Usuario no encontrado" });
 
         int connectionsToAdd = request.ConnectionsToAdd > 0 ? request.ConnectionsToAdd : 1;
-        decimal creditCost = connectionsToAdd; // 1 credito por conexion
+        int creditCost = connectionsToAdd; // 1 credito por conexion
 
-        if (targetUser.Credits < creditCost)
+        // Verificar créditos del actor (admin/reseller), no del target
+        if (actorUserId != targetUser.Id)
+        {
+            var actor = await _context.Users.FindAsync(actorUserId);
+            if (actor != null && actor.Credits < creditCost)
+                return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {creditCost} créditos." });
+        }
+        else if (targetUser.Credits < creditCost)
+        {
             return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {creditCost} créditos." });
+        }
 
         var creditsBefore = targetUser.Credits;
-        targetUser.Credits -= creditCost;
+        if (actorUserId != targetUser.Id)
+        {
+            var actor = await _context.Users.FindAsync(actorUserId);
+            if (actor != null)
+            {
+                actor.Credits -= creditCost;
+            }
+        }
+        else
+        {
+            targetUser.Credits -= creditCost;
+        }
         targetUser.AdditionalConnections += connectionsToAdd;
 
         await _context.SaveChangesAsync();
@@ -267,11 +287,31 @@ public class AdminController : ControllerBase
         if (plan == null)
             return BadRequest(new { Message = "Plan no encontrado" });
 
-        if (targetUser.Credits < plan.CreditCost)
+        // Verificar créditos del actor (admin/reseller), no del target
+        if (actorUserId != targetUser.Id)
+        {
+            var actor = await _context.Users.FindAsync(actorUserId);
+            if (actor != null && actor.Credits < plan.CreditCost)
+                return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {plan.CreditCost} créditos." });
+        }
+        else if (targetUser.Credits < plan.CreditCost)
+        {
             return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {plan.CreditCost} créditos." });
+        }
 
         var creditsBefore = targetUser.Credits;
-        targetUser.Credits -= plan.CreditCost;
+        if (actorUserId != targetUser.Id)
+        {
+            var actor = await _context.Users.FindAsync(actorUserId);
+            if (actor != null)
+            {
+                actor.Credits -= plan.CreditCost;
+            }
+        }
+        else
+        {
+            targetUser.Credits -= plan.CreditCost;
+        }
         targetUser.PlanId = plan.Id;
         targetUser.ServiceExpiry = DateTime.UtcNow.AddHours(request.DurationHours > 0 ? request.DurationHours : plan.DurationHours);
 
