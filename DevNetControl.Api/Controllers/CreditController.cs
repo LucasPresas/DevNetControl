@@ -51,11 +51,11 @@ public class CreditController : ControllerBase
         var transactions = await _context.CreditTransactions
             .Include(t => t.SourceUser)
             .Include(t => t.TargetUser)
-            .Where(t => t.SourceUser.TenantId == tenantId)
+            .Where(t => t.SourceUser != null && t.SourceUser.TenantId == tenantId)
             .OrderByDescending(t => t.CreatedAt)
             .Select(t => new CreditTransactionDto(
                 t.Id,
-                t.SourceUser.UserName,
+                t.SourceUser != null ? t.SourceUser.UserName : "Unknown",
                 t.TargetUser != null ? t.TargetUser.UserName : "Sistema",
                 t.Amount,
                 t.Type.ToString(),

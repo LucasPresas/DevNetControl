@@ -86,7 +86,8 @@ public class ApplicationDbContext : DbContext
             .HasOne(rt => rt.User)
             .WithMany()
             .HasForeignKey(rt => rt.UserId)
-            .OnDelete(DeleteBehavior.Cascade);
+            .OnDelete(DeleteBehavior.Cascade)
+            .IsRequired(false);
 
         modelBuilder.Entity<AuditLog>()
             .HasOne(al => al.User)

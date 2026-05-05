@@ -198,6 +198,7 @@ public class UserController : ControllerBase
     public async Task<IActionResult> GetMySubUsers()
     {
         var parentId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
         var subUsers = await _context.Users
             .Where(u => u.ParentId == parentId && u.Role != UserRole.Reseller && u.Role != UserRole.SubReseller)
             .Include(u => u.Plan)
@@ -221,7 +222,15 @@ public class UserController : ControllerBase
                 u.IsTrial,
                 u.IsProvisionedOnVps,
                 PlanDurationHours = u.Plan != null ? u.Plan.DurationHours : 0,
-                u.AdditionalConnections
+                u.AdditionalConnections,
+                ConnectedNodes = _context.NodeAccesses
+                    .Where(na => na.UserId == u.Id)
+                    .Select(na => new {
+                        na.Node.Id,
+                        na.Node.label,
+                        na.Node.IP
+                    })
+                    .ToList()
             }).ToListAsync();
 
         return Ok(subUsers);
@@ -232,7 +241,7 @@ public class UserController : ControllerBase
     #region Operaciones de Reseller (Admin Only)
 
     [HttpPost("create-reseller")]
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "SubResellerOrAbove")]
     [RateLimit("user-create")]
     public async Task<IActionResult> CreateReseller([FromBody] CreateResellerRequest request)
     {
@@ -246,6 +255,10 @@ public class UserController : ControllerBase
 
         var admin = await _context.Users.FindAsync(adminId);
         if (admin == null) return NotFound("Admin no encontrado.");
+
+        // Resellers/SubResellers solo pueden crear SubResellers, no Resellers completos
+        if (actorRole != "Admin" && actorRole != "SuperAdmin" && !request.IsSubReseller)
+            return BadRequest(new { Message = "Solo puedes crear Sub-Resellers, no Resellers." });
 
         var creditsBefore = admin.Credits;
 
@@ -484,10 +497,13 @@ public class UserController : ControllerBase
     {
         var parentId = ClaimsHelper.GetCurrentUserId(User);
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var role = ClaimsHelper.GetCurrentRole(User);
 
+        // Admin/SuperAdmin ven todos los resellers del tenant
+        // Reseller/SubReseller solo ven los que ellos mismos crearon
         var resellers = await _context.Users
-            .Where(u => (u.Role == UserRole.Reseller || u.Role == UserRole.SubReseller) &&
-                          (u.ParentId == parentId || u.TenantId == tenantId))
+            .Where(u => u.Role == UserRole.Reseller || u.Role == UserRole.SubReseller)
+            .Where(u => role == "Admin" || role == "SuperAdmin" ? u.TenantId == tenantId : u.ParentId == parentId)
             .Select(u => new
             {
                 u.Id,
@@ -671,16 +687,19 @@ public class UserController : ControllerBase
         if (plan == null)
             return BadRequest(new { Message = "Plan no encontrado" });
 
-        // Verificar créditos del actor (reseller), no del target
-        if (actorUserId != targetUser.Id)
+        // Verificar créditos solo para Resellers/SubResellers, Admin y SuperAdmin no pagan
+        if (actorRole != "Admin" && actorRole != "SuperAdmin")
         {
-            var actor = await _context.Users.FindAsync(actorUserId);
-            if (actor != null && actor.Credits < plan.CreditCost)
+            if (actorUserId != targetUser.Id)
+            {
+                var actor = await _context.Users.FindAsync(actorUserId);
+                if (actor != null && actor.Credits < plan.CreditCost)
+                    return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {plan.CreditCost} créditos." });
+            }
+            else if (targetUser.Credits < plan.CreditCost)
+            {
                 return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {plan.CreditCost} créditos." });
-        }
-        else if (targetUser.Credits < plan.CreditCost)
-        {
-            return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {plan.CreditCost} créditos." });
+            }
         }
 
         var creditsBefore = targetUser.Credits;
@@ -698,6 +717,8 @@ public class UserController : ControllerBase
         }
         targetUser.PlanId = plan.Id;
         targetUser.ServiceExpiry = DateTime.UtcNow.AddHours(request.DurationHours > 0 ? request.DurationHours : plan.DurationHours);
+        targetUser.IsTrial = false;
+        targetUser.TrialExpiry = null;
 
         await _context.SaveChangesAsync();
 

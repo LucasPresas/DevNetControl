@@ -7,39 +7,6 @@ import {
   ChevronDown, ChevronRight, FileText, Settings, Wallet, UserCheck
 } from 'lucide-react'
 
-const navSections = [
-  {
-    label: 'Dashboard',
-    items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
-    ]
-  },
-  {
-    label: 'Gestion',
-    items: [
-      { to: '/users', icon: Users, label: 'Usuarios' },
-      { to: '/plans', icon: FileText, label: 'Planes' },
-      { to: '/nodes', icon: Server, label: 'Nodos' },
-    ]
-  },
-  {
-    label: 'Finanzas',
-    items: [
-      { to: '/credits', icon: CreditCard, label: 'Creditos' },
-      { to: '/logs', icon: FileText, label: 'Logs' },
-    ]
-  },
-]
-
-const adminNavItems = [
-  { to: '/resellers', icon: UserCheck, label: 'Resellers' },
-]
-
-const adminItems = [
-  { to: '/admin', icon: Shield, label: 'Admin Panel' },
-  { to: '/superadmin', icon: Settings, label: 'Super Admin' },
-]
-
 export default function Layout() {
   const { user, logout, updateCredits } = useAuthStore()
   const navigate = useNavigate()
@@ -60,6 +27,8 @@ export default function Layout() {
 
   const isSuperAdmin = user?.role === 'SuperAdmin'
   const isAdmin = user?.role === 'Admin' || isSuperAdmin
+  const isReseller = user?.role === 'Reseller' || user?.role === 'SubReseller'
+  const isCustomer = user?.role === 'Customer'
 
   const toggleSection = (section) => {
     setCollapsedSections(prev => ({ ...prev, [section]: !prev[section] }))
@@ -69,6 +38,43 @@ export default function Layout() {
     logout()
     navigate('/login')
   }
+
+  // Nav sections according to role
+  const navSections = [
+    {
+      label: 'Dashboard',
+      show: true,
+      items: [
+        { to: '/dashboard', icon: LayoutDashboard, label: 'Inicio', show: true },
+      ]
+    },
+    {
+      label: 'Gestion',
+      show: true,
+      items: [
+        { to: '/users', icon: Users, label: 'Usuarios', show: !isCustomer },
+        { to: '/plans', icon: FileText, label: 'Planes', show: isAdmin || isSuperAdmin },
+        { to: '/nodes', icon: Server, label: 'Nodos', show: isAdmin || isSuperAdmin },
+      ]
+    },
+    {
+      label: 'Finanzas',
+      show: true,
+      items: [
+        { to: '/credits', icon: CreditCard, label: 'Creditos', show: !isCustomer },
+        { to: '/logs', icon: FileText, label: 'Logs', show: !isCustomer },
+      ]
+    },
+  ]
+
+  const adminNavItems = [
+    { to: '/resellers', icon: UserCheck, label: 'Resellers' },
+  ]
+
+  const adminItems = [
+    { to: '/admin', icon: Shield, label: 'Admin Panel' },
+    { to: '/superadmin', icon: Settings, label: 'Super Admin' },
+  ]
 
   return (
     <div className="min-h-screen flex bg-[var(--bg-primary)]">
@@ -101,44 +107,49 @@ export default function Layout() {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-3 px-2">
-          {navSections.map((section) => (
-            <div key={section.label} className="mb-4">
-              <button
-                onClick={() => toggleSection(section.label)}
-                className="w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider hover:text-[var(--text-secondary)]"
-              >
-                {section.label}
-                {collapsedSections[section.label]
-                  ? <ChevronRight className="w-3 h-3" />
-                  : <ChevronDown className="w-3 h-3" />
-                }
-              </button>
+          {navSections.map((section) => {
+            const visibleItems = section.items.filter(i => i.show)
+            if (!section.show || visibleItems.length === 0) return null
 
-              {!collapsedSections[section.label] && (
-                <div className="mt-1 space-y-0.5">
-                  {section.items.map((item) => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      onClick={() => setSidebarOpen(false)}
-                      className={({ isActive }) =>
-                        `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-                          isActive
-                            ? 'bg-blue-500/10 text-blue-400 font-medium'
-                            : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
-                        }`
-                      }
-                    >
-                      <item.icon className="w-4 h-4 shrink-0" />
-                      {item.label}
-                    </NavLink>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+            return (
+              <div key={section.label} className="mb-4">
+                <button
+                  onClick={() => toggleSection(section.label)}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider hover:text-[var(--text-secondary)]"
+                >
+                  {section.label}
+                  {collapsedSections[section.label]
+                    ? <ChevronRight className="w-3 h-3" />
+                    : <ChevronDown className="w-3 h-3" />
+                  }
+                </button>
 
-          {isAdmin && (
+                {!collapsedSections[section.label] && (
+                  <div className="mt-1 space-y-0.5">
+                    {visibleItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => setSidebarOpen(false)}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+                            isActive
+                              ? 'bg-blue-500/10 text-blue-400 font-medium'
+                              : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+                          }`
+                        }
+                      >
+                        <item.icon className="w-4 h-4 shrink-0" />
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {(isAdmin || isReseller) && (
             <div className="mt-2 pt-2 border-t border-[var(--border-color)]">
               <div className="px-2 py-1.5 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
                 Resellers

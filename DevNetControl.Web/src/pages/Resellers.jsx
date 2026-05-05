@@ -81,7 +81,7 @@ export default function Resellers() {
   async function handleToggleSuspend(id) {
     setActionLoading(true)
     try {
-      const { data } = await api.post(`/user/${id}/toggle-suspend`)
+      const { data } = await api.post(`/user/${id}/suspend`)
       setMessage({ type: 'success', text: data.message })
       fetchData()
     } catch (err) {

@@ -43,7 +43,7 @@ export default function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="users" element={<Users />} />
         <Route path="resellers" element={
-          <ProtectedRoute roles={['Admin', 'SuperAdmin']}>
+          <ProtectedRoute roles={['Admin', 'SuperAdmin', 'Reseller', 'SubReseller']}>
             <Resellers />
           </ProtectedRoute>
         } />
@@ -53,8 +53,16 @@ export default function App() {
           </ProtectedRoute>
         } />
         <Route path="credits" element={<Credits />} />
-        <Route path="nodes" element={<Nodes />} />
-        <Route path="nodes/:id" element={<NodeDetail />} />
+        <Route path="nodes" element={
+          <ProtectedRoute roles={['Admin', 'SuperAdmin']}>
+            <Nodes />
+          </ProtectedRoute>
+        } />
+        <Route path="nodes/:id" element={
+          <ProtectedRoute roles={['Admin', 'SuperAdmin']}>
+            <NodeDetail />
+          </ProtectedRoute>
+        } />
         <Route path="logs" element={<Logs />} />
         <Route
           path="admin"
