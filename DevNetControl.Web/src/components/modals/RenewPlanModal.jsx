@@ -50,8 +50,9 @@ export default function RenewPlanModal({ show, onClose, user, onSuccess }) {
 
       const { data } = await renewPlan(user.id, payload)
       setMessage({ type: 'success', text: data.message || 'Plan renovado' })
+      // Actualizar inmediatamente
+      onSuccess && onSuccess()
       setTimeout(() => {
-        onSuccess && onSuccess()
         onClose()
       }, 1000)
     } catch (err) {

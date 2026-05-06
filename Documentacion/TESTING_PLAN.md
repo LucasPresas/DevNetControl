@@ -2,19 +2,20 @@
 
 ## 1. 🔍 Diagnóstico de Problemas Actuales
 
-### Problema Identificado: Botones de Eliminación
-- **Síntoma**: "El usuario canceló la operación" o similares en debug
+### ✅ Problema de Eliminación - RESUELTO (05 mayo 2026)
+- **Síntoma anterior**: "El usuario canceló la operación" o similares en debug
 - **Causa Raíz**: Discrepancia entre frontend y backend en endpoints bulk
-- **Análisis**:
-  - Frontend (`Users.jsx:184`): Envía `{ UserIds: selectedIds }` via `POST /user/bulk/delete`
-  - Backend (`UserController.cs:353`): Espera `BulkDeleteRequest` con `List<Guid> UserIds`
-  - Frontend usa `POST` pero el patrón REST sugiere `DELETE` para eliminación
-  - Endpoints individuales (`DELETE /api/admin/users/{id}`) existen pero no se usan en el frontend
+- **Solución aplicada**: 
+  - Frontend ahora envía payload correcto en camelCase (`userIds`)
+  - Backend recibe correctamente `BulkDeleteRequest` con `List<Guid> UserIds`
+  - Endpoints individuales y bulk funcionando correctamente
+  - Botones de eliminación implementados en Users, Plans, Nodes y Resellers
 
-### Otros Endpoints Faltantes en Frontend
-- **Planes**: No hay botón de eliminación en la UI (solo en debug tool)
-- **Resellers**: Los botones de eliminación no están implementados en `Resellers.jsx`
-- **Nodos**: Falta implementación de eliminación en `Nodes.jsx`
+### Estado Actual de Eliminación en Frontend
+- ✅ **Users**: Eliminación individual y bulk implementada
+- ✅ **Planes**: Botón de eliminación en `Plans.jsx` funcionando
+- ✅ **Resellers**: Botones de eliminación implementados en `Resellers.jsx`
+- ✅ **Nodos**: Eliminación implementada en `Nodes.jsx`
 
 ---
 
@@ -310,27 +311,19 @@ echo "✅ Tests completados"
 
 ## 7. 🔧 Corrección de Bugs Identificados
 
-### Bug 1: Eliminación Bulk en Frontend
-**Archivo**: `DevNetControl.Web/src/pages/Users.jsx:184`
-**Problema**: El payload se envía como `{ UserIds: selectedIds }` pero el backend espera JSON camelCase (`userIds`)
-**Solución**: Verificar configuración de `PropertyNamingPolicy` en `Program.cs:22` (ya está en camelCase). El problema real puede ser que el backend no está recibiendo el body correctamente.
+### ✅ Bug 1: Eliminación Bulk en Frontend - RESUELTO
+**Archivo**: `DevNetControl.Web/src/pages/Users.jsx`
+**Estado anterior**: El payload se enviaba incorrectamente
+**Solución aplicada**: 
+- Frontend envía correctamente `{ userIds: selectedIds }` en camelCase
+- Backend recibe y procesa correctamente via `BulkDeleteRequest`
+- Configuración de `PropertyNamingPolicy` en `Program.cs:22` funcionando correctamente
 
-**Código sugerido**:
-```javascript
-// En Users.jsx:183-187
-const payload = { userIds: selectedIds }; // camelCase
-console.log('📦 Payload:', JSON.stringify(payload, null, 2));
-
-const { data } = await api.post('/user/bulk/delete', payload);
-```
-
-### Bug 2: Eliminación Individual No Implementada en UI
+### ✅ Bug 2: Eliminación Individual Implementada en UI
 **Archivo**: `Users.jsx`
-**Falta**: Botón de eliminación individual en la tabla de usuarios
-**Solución**: Agregar columna de acciones con botón eliminar
-
+**Estado**: Botón de eliminación individual implementado en la tabla de usuarios
 ```jsx
-// En la columna de acciones, agregar:
+// Implementado en Users.jsx
 <button
   onClick={() => handleDeleteUser(u.id)}
   className="btn btn-sm btn-secondary text-red-400"
@@ -340,9 +333,9 @@ const { data } = await api.post('/user/bulk/delete', payload);
 </button>
 ```
 
-### Bug 3: Endpoints de Plans y Nodes sin UI de Eliminación
+### ✅ Bug 3: Endpoints de Plans, Nodes y Resellers con UI de Eliminación
 **Archivos**: `Plans.jsx`, `Nodes.jsx`, `Resellers.jsx`
-**Falta**: Implementación de botones de eliminación que llamen a los endpoints correctos
+**Estado**: Botones de eliminación implementados y funcionando correctamente
 
 ---
 

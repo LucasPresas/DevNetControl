@@ -95,7 +95,7 @@ export default function Plans() {
 
   function resetForm() {
     setForm({ name: '', description: '', durationType: 'days', durationValue: 30, creditCost: 1, maxConnections: 1, maxDevices: 1 })
-    setShowCreate(false)
+    // No cerramos showCreate aquí, el botón "Nuevo Plan" debe mostrar el formulario
     setEditingPlan(null)
   }
 
@@ -182,7 +182,11 @@ export default function Plans() {
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Planes</h1>
           <p className="text-sm text-[var(--text-muted)]">{plans.length} planes configurados</p>
         </div>
-        <button onClick={() => { setShowCreate(true); setEditingPlan(null); resetForm() }} className="btn btn-primary">
+        <button onClick={() => { 
+          setEditingPlan(null); 
+          setForm({ name: '', description: '', durationType: 'days', durationValue: 30, creditCost: 1, maxConnections: 1, maxDevices: 1 });
+          setShowCreate(true); 
+        }} className="btn btn-primary">
           <Plus className="w-4 h-4" />
           Nuevo Plan
         </button>

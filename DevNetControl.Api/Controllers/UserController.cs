@@ -23,6 +23,7 @@ public class UserController : ControllerBase
     private readonly ActivityLogService _activityLogService;
     private readonly BulkOperationService _bulkService;
     private readonly PlanValidationService _planValidationService;
+    private readonly UserOperationService _userOperationService;
 
     public UserController(ApplicationDbContext context, 
                           UserProvisioningService provisioningService,
@@ -30,7 +31,8 @@ public class UserController : ControllerBase
                           AuditService auditService,
                           ActivityLogService activityLogService,
                           BulkOperationService bulkService,
-                          PlanValidationService planValidationService)
+                          PlanValidationService planValidationService,
+                          UserOperationService userOperationService)
     {
         _context = context;
         _provisioningService = provisioningService;
@@ -39,6 +41,7 @@ public class UserController : ControllerBase
         _activityLogService = activityLogService;
         _bulkService = bulkService;
         _planValidationService = planValidationService;
+        _userOperationService = userOperationService;
     }
 
     #region Gestión de Usuarios y VPS
@@ -112,20 +115,17 @@ public class UserController : ControllerBase
         var userId = ClaimsHelper.GetCurrentUserId(User);
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
         var role = ClaimsHelper.GetCurrentRole(User);
+        var userName = ClaimsHelper.GetCurrentUserName(User);
 
-        var targetUser = await _context.Users.FindAsync(id);
-        if (targetUser == null || targetUser.TenantId != tenantId)
-            return NotFound(new { Message = "Usuario no encontrado." });
+        Console.WriteLine($"[DEBUG] ExtendService - Target: {id}, Days: {request.Days}");
 
-        // Validación de jerarquía: Solo Admin o el padre directo pueden extender
-        if (role != "Admin" && role != "SuperAdmin" && targetUser.ParentId != userId)
-            return Forbid();
-
-        var result = await _provisioningService.ExtendServiceAsync(id, tenantId, request.Days, request.NodeId);
+        var result = await _userOperationService.ExtendServiceAsync(
+            id, tenantId, request.Days, request.NodeId);
 
         if (!result.Success)
             return BadRequest(new { Message = result.Message });
 
+        Console.WriteLine($"[DEBUG] Service extended. New expiry: {result.Message}");
         return Ok(new { Message = result.Message });
     }
 
@@ -359,7 +359,6 @@ public class UserController : ControllerBase
         var actorRole = ClaimsHelper.GetCurrentRole(User);
         var actorUserName = ClaimsHelper.GetCurrentUserName(User);
 
-        // Si es Admin o SuperAdmin, puede eliminar sin verificación de jerarquía
         if (actorRole == "Admin" || actorRole == "SuperAdmin")
         {
             int successCount = 0;
@@ -376,7 +375,6 @@ public class UserController : ControllerBase
                     continue;
                 }
 
-                // No permitir eliminar Admins o SuperAdmins
                 if (user.Role == UserRole.Admin || user.Role == UserRole.SuperAdmin)
                 {
                     failCount++;
@@ -384,12 +382,9 @@ public class UserController : ControllerBase
                     continue;
                 }
 
-                // Eliminar subordinados y accesos relacionados
-                var subords = _context.Users.Where(u => u.ParentId == id);
-                _context.Users.RemoveRange(subords);
+                _context.Users.RemoveRange(_context.Users.Where(u => u.ParentId == id));
                 _context.NodeAccesses.RemoveRange(_context.NodeAccesses.Where(na => na.UserId == id));
                 _context.PlanAccesses.RemoveRange(_context.PlanAccesses.Where(pa => pa.UserId == id));
-
                 _context.Users.Remove(user);
                 successCount++;
             }
@@ -409,7 +404,6 @@ public class UserController : ControllerBase
             });
         }
 
-        // Para SubResellers, usar lógica original con verificación de jerarquía
         var (successCount2, failCount2, errors2) = await _bulkService.BulkDeleteAsync(
             actorUserId, tenantId, request.UserIds, actorUserId, actorRole, actorUserName);
 
@@ -507,24 +501,49 @@ public class UserController : ControllerBase
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
         if (user == null) return NotFound(new { Message = "Usuario no encontrado." });
 
-        if (!string.IsNullOrEmpty(request.UserName)) user.UserName = request.UserName;
-        if (!string.IsNullOrEmpty(request.Password)) user.PasswordHash = BC.HashPassword(request.Password);
+        var changes = new List<string>();
 
-        // Actualizar nodo si se especifica
-        if (request.NodeId.HasValue)
+        if (!string.IsNullOrEmpty(request.UserName))
         {
-            var node = await _context.VpsNodes.FindAsync(request.NodeId.Value);
-            if (node != null && (node.TenantId == tenantId || node.TenantId == Guid.Empty))
-            {
-                // Eliminar accesos existentes y asignar nuevo nodo
-                var existingAccess = _context.NodeAccesses.Where(na => na.UserId == id);
-                _context.NodeAccesses.RemoveRange(existingAccess);
-                _context.NodeAccesses.Add(new NodeAccess { Id = Guid.NewGuid(), UserId = id, NodeId = request.NodeId.Value });
-            }
+            changes.Add($"Nombre: {user.UserName} -> {request.UserName}");
+            user.UserName = request.UserName;
+        }
+
+        if (!string.IsNullOrEmpty(request.Password))
+        {
+            changes.Add("Contraseña actualizada");
+            user.PasswordHash = BC.HashPassword(request.Password);
+        }
+
+        if (request.ParentId.HasValue)
+        {
+            var newParent = await _context.Users.FirstOrDefaultAsync(u => u.Id == request.ParentId.Value && u.TenantId == tenantId);
+            if (newParent == null)
+                return BadRequest(new { Message = "El reseller especificado no existe en este tenant" });
+            
+            if (newParent.Role != UserRole.Reseller && newParent.Role != UserRole.SubReseller && newParent.Role != UserRole.Admin)
+                return BadRequest(new { Message = "El usuario especificado no puede ser un reseller" });
+            
+            changes.Add($"Reseller: {user.ParentId} -> {request.ParentId.Value}");
+            user.ParentId = request.ParentId.Value;
+        }
+
+        if (request.MaxConnections.HasValue)
+        {
+            changes.Add($"Conexiones adicionales: {user.AdditionalConnections} -> {request.MaxConnections.Value}");
+            user.AdditionalConnections = request.MaxConnections.Value;
         }
 
         await _context.SaveChangesAsync();
-        return Ok(new { Message = "Usuario actualizado" });
+
+        if (changes.Count > 0)
+        {
+            await _activityLogService.LogUserUpdatedAsync(
+                ClaimsHelper.GetCurrentUserId(User), user.Id, user.UserName,
+                tenantId, ClaimsHelper.GetCurrentRole(User), ClaimsHelper.GetCurrentUserName(User), string.Join(", ", changes));
+        }
+
+        return Ok(new { Message = "Usuario actualizado correctamente", Changes = changes });
     }
 
     [HttpPost("{id}/toggle-suspend")]
@@ -561,7 +580,6 @@ public class UserController : ControllerBase
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
         if (user == null) return NotFound(new { Message = "Usuario no encontrado." });
 
-        // Verificar jerarquía: solo el padre directo o Admin pueden hacerlo
         if (actorRole != "Admin" && actorRole != "SuperAdmin" && user.ParentId != actorUserId)
             return Forbid();
 
@@ -584,40 +602,21 @@ public class UserController : ControllerBase
         var actorRole = ClaimsHelper.GetCurrentRole(User);
         var actorUserName = ClaimsHelper.GetCurrentUserName(User);
 
-        var targetUser = await _context.Users
-            .Include(u => u.Plan)
-            .FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
-
-        if (targetUser == null)
-            return NotFound(new { Message = "Usuario no encontrado." });
-
-        // Verificar jerarquía: solo el padre directo o Admin pueden hacerlo
-        if (actorRole != "Admin" && actorRole != "SuperAdmin" && targetUser.ParentId != actorUserId)
-            return Forbid();
-
         int connectionsToAdd = request.ConnectionsToAdd > 0 ? request.ConnectionsToAdd : 1;
-        decimal creditCost = connectionsToAdd;
 
-        if (targetUser.Credits < creditCost)
-            return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {creditCost} créditos." });
+        Console.WriteLine($"[DEBUG] AddConnection - Target: {id}, Actor: {actorUserId}, Amount: {connectionsToAdd}");
 
-        var creditsBefore = targetUser.Credits;
-        targetUser.Credits -= creditCost;
-        targetUser.AdditionalConnections += connectionsToAdd;
+        var result = await _userOperationService.AddConnectionsAsync(
+            id, actorUserId, actorRole, actorUserName, tenantId, connectionsToAdd);
 
-        await _context.SaveChangesAsync();
-
-        await _activityLogService.LogCreditsConsumedAsync(
-            actorUserId, id, targetUser.UserName,
-            tenantId, actorRole, actorUserName,
-            creditCost, creditsBefore, targetUser.Credits,
-            $"Agregadas {connectionsToAdd} conexión(es) a {targetUser.UserName}");
+        if (!result.Success)
+            return BadRequest(new { Message = result.Message });
 
         return Ok(new
         {
-            Message = $"Se agregaron {connectionsToAdd} conexión(es). Créditos gastados: {creditCost}",
-            NewMaxConnections = (targetUser.Plan?.MaxConnections ?? 0) + targetUser.AdditionalConnections,
-            RemainingCredits = targetUser.Credits
+            Message = result.Message,
+            NewMaxConnections = result.NewMaxConnections,
+            RemainingCredits = result.RemainingCredits
         });
     }
 
@@ -630,43 +629,21 @@ public class UserController : ControllerBase
         var actorRole = ClaimsHelper.GetCurrentRole(User);
         var actorUserName = ClaimsHelper.GetCurrentUserName(User);
 
-        var targetUser = await _context.Users
-            .Include(u => u.Plan)
-            .FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
+        Console.WriteLine($"[DEBUG] RenewPlan - Target: {id}, Plan: {request.PlanId}, Days: {request.DurationHours}");
 
-        if (targetUser == null)
-            return NotFound(new { Message = "Usuario no encontrado." });
+        var result = await _userOperationService.RenewPlanAsync(
+            id, actorUserId, actorRole, actorUserName, tenantId, 
+            request.PlanId, request.DurationHours);
 
-        // Verificar jerarquía: solo el padre directo o Admin pueden hacerlo
-        if (actorRole != "Admin" && actorRole != "SuperAdmin" && targetUser.ParentId != actorUserId)
-            return Forbid();
-
-        var plan = await _context.Plans.FindAsync(request.PlanId);
-        if (plan == null)
-            return BadRequest(new { Message = "Plan no encontrado" });
-
-        if (targetUser.Credits < plan.CreditCost)
-            return BadRequest(new { Message = $"Créditos insuficientes. Se requieren {plan.CreditCost} créditos." });
-
-        var creditsBefore = targetUser.Credits;
-        targetUser.Credits -= plan.CreditCost;
-        targetUser.PlanId = plan.Id;
-        targetUser.ServiceExpiry = DateTime.UtcNow.AddHours(request.DurationHours > 0 ? request.DurationHours : plan.DurationHours);
-
-        await _context.SaveChangesAsync();
-
-        await _activityLogService.LogCreditsConsumedAsync(
-            actorUserId, id, targetUser.UserName,
-            tenantId, actorRole, actorUserName,
-            plan.CreditCost, creditsBefore, targetUser.Credits,
-            $"Plan {plan.Name} renovado para {targetUser.UserName}. Duración: {request.DurationHours} horas");
+        if (!result.Success)
+            return BadRequest(new { Message = result.Message });
 
         return Ok(new
         {
-            Message = $"Plan {plan.Name} renovado exitosamente. Expira: {targetUser.ServiceExpiry}",
-            PlanName = plan.Name,
-            ServiceExpiry = targetUser.ServiceExpiry,
-            RemainingCredits = targetUser.Credits
+            Message = result.Message,
+            PlanName = result.PlanName,
+            ServiceExpiry = result.ServiceExpiry,
+            RemainingCredits = result.RemainingCredits
         });
     }
 
@@ -684,8 +661,7 @@ public class UserController : ControllerBase
 
         var deletedUserName = user.UserName;
 
-        var subordinates = _context.Users.Where(u => u.ParentId == id);
-        _context.Users.RemoveRange(subordinates);
+        _context.Users.RemoveRange(_context.Users.Where(u => u.ParentId == id));
         _context.NodeAccesses.RemoveRange(_context.NodeAccesses.Where(na => na.UserId == id));
         _context.PlanAccesses.RemoveRange(_context.PlanAccesses.Where(pa => pa.UserId == id));
 
@@ -707,11 +683,9 @@ public class UserController : ControllerBase
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
         if (user == null) return NotFound(new { Message = "Usuario no encontrado." });
 
-        // Eliminar accesos existentes
         var existing = _context.NodeAccesses.Where(na => na.UserId == id);
         _context.NodeAccesses.RemoveRange(existing);
 
-        // Agregar nuevos accesos
         foreach (var nodeId in request.NodeIds)
         {
             var node = await _context.VpsNodes.FindAsync(nodeId);
@@ -754,7 +728,7 @@ public class UserController : ControllerBase
         {
             nodes.Add(new HierarchyNodeDto(
                 s.Id, s.UserName, s.Role, s.Credits, 
-                await GetSubordinateChildrenAsync(s.Id) // Recursión async pura
+                await GetSubordinateChildrenAsync(s.Id)
             ));
         }
         return nodes;
