@@ -25,7 +25,9 @@ public class TokenService
             new Claim("TenantId", user.TenantId.ToString()),
         };
 
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
+        var jwtKey = Environment.GetEnvironmentVariable("DEVNETCONTROL_JWT_KEY")
+            ?? _config["Jwt:Key"]!;
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var token = new JwtSecurityToken(

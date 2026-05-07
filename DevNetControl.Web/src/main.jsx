@@ -3,7 +3,10 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './index.css'
-import './lib/debugApi' // 🧪 Load debug tool
+
+if (import.meta.env.DEV) {
+  import('./lib/debugApi')
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

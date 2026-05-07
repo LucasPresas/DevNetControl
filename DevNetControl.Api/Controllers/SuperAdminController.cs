@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using DevNetControl.Api.Infrastructure.Persistence;
 using DevNetControl.Api.Domain;
+using DevNetControl.Api.Infrastructure.Security;
 
 namespace DevNetControl.Api.Controllers;
 
@@ -12,8 +13,13 @@ namespace DevNetControl.Api.Controllers;
 public class SuperAdminController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
+    private readonly EncryptionService _encryption;
 
-    public SuperAdminController(ApplicationDbContext context) => _context = context;
+    public SuperAdminController(ApplicationDbContext context, EncryptionService encryption)
+    {
+        _context = context;
+        _encryption = encryption;
+    }
 
     [HttpPost("tenants")]
     public async Task<IActionResult> CreateTenant([FromBody] CreateTenantRequest req)
@@ -123,16 +129,17 @@ public class SuperAdminController : ControllerBase
     [HttpPost("provision-node")]
     public async Task<IActionResult> ProvisionNode([FromBody] ProvisionNodeRequest req)
     {
-        // REFACTOR: Usando los nombres exactos de tu entidad VpsNode
+        var superAdminId = ClaimsHelper.GetCurrentUserId(User);
+
         var node = new VpsNode
         {
             Id = Guid.NewGuid(),
-            TenantId = req.TargetTenantId, 
-            IP = req.IpAddress,      // Según tu controlador
-            SshPort = req.SshPort,   // Según tu controlador
-            label = req.NodeName,    // En tu entidad se llama 'label'
-            // Como SuperAdmin, el nodo no tiene un 'OwnerId' personal necesariamente, 
-            // o puedes asignarte a ti mismo si el modelo lo requiere.
+            TenantId = req.TargetTenantId,
+            IP = req.IpAddress,
+            SshPort = req.SshPort,
+            label = req.NodeName,
+            EncryptedPassword = _encryption.Encrypt(req.Password),
+            OwnerId = superAdminId,
         };
 
         _context.VpsNodes.Add(node);
@@ -142,7 +149,6 @@ public class SuperAdminController : ControllerBase
     }
 }
 
-// Actualizamos el Record para incluir el puerto SSH
 public record CreateTenantRequest(string Name, string Subdomain, string AdminEmail, string AdminUsername, string AdminPassword);
 
-public record ProvisionNodeRequest(Guid TargetTenantId, string NodeName, string IpAddress, int SshPort = 22);
+public record ProvisionNodeRequest(Guid TargetTenantId, string NodeName, string IpAddress, string Password, int SshPort = 22);

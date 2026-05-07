@@ -371,7 +371,3 @@ public class VpsNodeController : ControllerBase
         });
     }
 }
-
-public record CreateNodeRequest(string IP, int SshPort, string Label, string Password, decimal CreditCost = 0);
-public record UpdateNodeRequest(string? IP = null, int? SshPort = null, string? Label = null, string? Password = null);
-public record ExecuteCommandRequest(string Command);

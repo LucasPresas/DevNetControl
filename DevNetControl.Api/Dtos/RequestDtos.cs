@@ -29,8 +29,8 @@ public record CreditTransactionWithBalanceDto(
 );
 
 // Planes
-public record CreatePlanRequest(string Name, int DurationHours, decimal CreditCost, int MaxConnections, int MaxDevices);
-public record UpdatePlanRequest(string? Name, int? DurationHours, decimal? CreditCost);
+public record CreatePlanRequest(string Name, string? Description = null, int DurationHours = 0, decimal CreditCost = 0, int MaxConnections = 1, int MaxDevices = 1, bool IsTrial = false);
+public record UpdatePlanRequest(string? Name = null, string? Description = null, int? DurationHours = null, decimal? CreditCost = null, int? MaxConnections = null, int? MaxDevices = null, bool? IsActive = null);
 public record ExtendServiceRequest(int Days, Guid NodeId);
 
 // Usuarios
@@ -43,8 +43,8 @@ public record AddConnectionRequest(int ConnectionsToAdd = 1);
 public record RenewPlanRequest(Guid PlanId, int DurationHours);
 
   // Infraestructura
-  public record CreateNodeRequest(string IP, int SshPort, string Label, string Password, decimal CreditCost);
-  public record UpdateNodeRequest(string? IP, int? SshPort, string? Label, string? Password);
+  public record CreateNodeRequest(string IP, int SshPort = 22, string Label = "", string Password = "", decimal CreditCost = 0);
+  public record UpdateNodeRequest(string? IP = null, int? SshPort = null, string? Label = null, string? Password = null);
   public record ExecuteCommandRequest(string Command);
   public record GrantNodeAccessRequest(Guid UserId, Guid NodeId);
   public record BulkDeleteNodesRequest(List<Guid> NodeIds);

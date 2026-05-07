@@ -98,9 +98,9 @@ public class CreditService
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
-            SourceUserId = targetUserId,
-            SourceBalanceBefore = targetBalanceBefore,
-            SourceBalanceAfter = targetUser.Credits,
+            SourceUserId = null,
+            SourceBalanceBefore = null,
+            SourceBalanceAfter = null,
             TargetUserId = targetUserId,
             TargetBalanceBefore = targetBalanceBefore,
             TargetBalanceAfter = targetUser.Credits,

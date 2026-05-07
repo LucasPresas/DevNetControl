@@ -20,7 +20,7 @@ export const useAuthStore = create((set) => ({
        }
        localStorage.setItem('token', data.accessToken)
       localStorage.setItem('user', JSON.stringify(userData))
-      set({ user: userData, token: data.token, isAuthenticated: true, isLoading: false })
+       set({ user: userData, token: data.accessToken, isAuthenticated: true, isLoading: false })
       return { success: true }
     } catch (err) {
       const message = err.response?.data?.message || 'Error al iniciar sesion'

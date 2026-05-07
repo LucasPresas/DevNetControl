@@ -13,37 +13,42 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
-  
-  // LOG: Show request details
-  console.group(`🚀 API REQUEST: ${config.method.toUpperCase()} ${config.url}`)
-  console.log('📦 Payload:', config.data || 'N/A')
-  console.log('🔑 Auth:', token ? 'Bearer token present' : 'No auth')
-  console.groupEnd()
-  
+
+  if (import.meta.env.DEV) {
+    console.group(`🚀 API REQUEST: ${config.method.toUpperCase()} ${config.url}`)
+    console.log('📦 Payload:', config.data || 'N/A')
+    console.log('🔑 Auth:', token ? 'Bearer token present' : 'No auth')
+    console.groupEnd()
+  }
+
   return config
 })
 
 // ===== DEBUG: Response Interceptor =====
 api.interceptors.response.use(
   (response) => {
-    console.group(`✅ API RESPONSE: ${response.status} ${response.config.method.toUpperCase()} ${response.config.url}`)
-    console.log('📋 Data:', response.data)
-    console.groupEnd()
+    if (import.meta.env.DEV) {
+      console.group(`✅ API RESPONSE: ${response.status} ${response.config.method.toUpperCase()} ${response.config.url}`)
+      console.log('📋 Data:', response.data)
+      console.groupEnd()
+    }
     return response
   },
   (error) => {
-    console.group(`❌ API ERROR: ${error.response?.status || 'Network Error'} ${error.config?.method?.toUpperCase()} ${error.config?.url}`)
-    console.error('⚠️ Error Details:', {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      config: {
-        method: error.config?.method,
-        url: error.config?.url,
-        data: error.config?.data
-      }
-    })
-    console.groupEnd()
+    if (import.meta.env.DEV) {
+      console.group(`❌ API ERROR: ${error.response?.status || 'Network Error'} ${error.config?.method?.toUpperCase()} ${error.config?.url}`)
+      console.error('⚠️ Error Details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        config: {
+          method: error.config?.method,
+          url: error.config?.url,
+          data: error.config?.data
+        }
+      })
+      console.groupEnd()
+    }
     
     if (error.response?.status === 401) {
       localStorage.removeItem('token')

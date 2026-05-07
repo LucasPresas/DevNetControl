@@ -89,36 +89,18 @@ export default function Nodes() {
   }
 
   async function handleBulkDelete() {
-    console.group('🗑️ Nodes.handleBulkDelete INICIADO')
-    console.log('📊 selectedIds:', selectedIds)
-    
-    if (selectedIds.length === 0) {
-      console.warn('⚠️ No hay nodos seleccionados')
-      console.groupEnd()
-      return
-    }
-    
+    if (selectedIds.length === 0) return
+
     const confirmDelete = confirm(`Eliminar ${selectedIds.length} nodos? Esta accion no se puede deshacer.`)
-    console.log('✓ Confirmación del usuario:', confirmDelete)
-    
-    if (!confirmDelete) {
-      console.log('❌ Usuario canceló la operación')
-      console.groupEnd()
-      return
-    }
-    
+    if (!confirmDelete) return
+
     try {
-      console.log('🔄 Enviando petición DELETE bulk...')
       const { data } = await bulkDeleteNodes(selectedIds)
-      console.log('✅ Respuesta exitosa:', data)
-      alert(data.message)
+      setMessage({ type: 'success', text: data.message })
       setSelectedIds([])
       fetchNodes()
     } catch (err) {
-      console.error('❌ Error en handleBulkDelete:', err)
-      alert(err.response?.data?.message || 'Error al eliminar')
-    } finally {
-      console.groupEnd()
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Error al eliminar' })
     }
   }
 

@@ -76,9 +76,9 @@
 | B2 | Media | DTOs shadowed: controllers definen records que contradicen RequestDtos.cs | `PlanController`, `VpsNodeController` | Pendiente |
 | B3 | Baja | `VpsNode.label` en minuscula (viola convenciones C#) | `Domain/VpsNode.cs` | Pendiente |
 | B4 | Media | ProvisionNode en SuperAdminController incompleto | `SuperAdminController.cs` | Pendiente |
-| B5 | Media | AddCreditsAsync: SourceUserId = TargetUserId | `CreditService.cs` | Pendiente |
+| B5 | Media | AddCreditsAsync: SourceUserId = TargetUserId | `CreditService.cs` | **Corregido** |
 | B6 | Baja | EntityConfigurations no aplicadas (codigo muerto) | `Persistence/Configurations/` | Pendiente |
-| B7 | Baja | JWT key hardcoded en appsettings.json (fallback) | `appsettings.json` | Pendiente |
+| B7 | Baja | JWT key hardcoded en appsettings.json (fallback) | `appsettings.json` | **Corregido** |
 | B8 | Media | UpdateUser duplicado en AdminController y UserController | `AdminController.cs`, `UserController.cs` | Pendiente |
 
 ### 2.3 Mejoras Implementadas Recientemente
@@ -91,6 +91,8 @@
 | Node health con carga | `GET /api/vpsnode/health` ahora incluye CPU%, RAM%, Disk%, userCount |
 | Activity log de eliminaciones | `LogSubResellerDeletedAsync` registra reembolso, hijos eliminados, saldo |
 | FK cleanup en delete | Eliminacion de ActivityLogs/Notifications/Sessions al borrar usuarios (evita 409) |
+| Credit transaction fix | AddCreditsAsync: SourceUserId = null (creditos generados por sistema, no auto-transferencia) |
+| JWT security | Key movida a env var `DEVNETCONTROL_JWT_KEY`, appsettings con placeholder |
 
 ---
 
@@ -128,7 +130,7 @@
 | F3 | Alta | Debug API expuesto en produccion | `main.jsx` | Pendiente |
 | F4 | Baja | console.log excesivo en interceptors | `lib/api.js` | Pendiente |
 | F5 | Baja | alert() en Nodes.jsx | `pages/Nodes.jsx` | Pendiente |
-| F6 | Baja | Resellers_backup.jsx archivo muerto | `pages/` | Pendiente |
+| F6 | Baja | Resellers_backup.jsx archivo muerto | `pages/` | **Corregido** |
 | F7 | Media | Role numerico vs string en Dashboard | `Dashboard.jsx` | Pendiente |
 | F8 | Baja | AdminPanel/SuperAdminPanel clases inconsistentes | `pages/` | Pendiente |
 | F9 | Media | Credits transfer requiere UUID manual | `pages/Credits.jsx` | Pendiente |
@@ -222,15 +224,47 @@ Ver TESTING.md para plan detallado de testing.
 
 ## 7. Checklist - Pendientes por Resolver (Version Actual)
 
+### URGENTE - Migración de Clientes Reales (Prioridad Máxima)
+
+Esta seccion es prioritaria para poder importar usuarios existentes de servidores SSH a DevNetControl antes de lanzar a produccion.
+
+**Backend (API)**
+- [ ] **MIG-1**: Crear endpoint `POST /api/admin/migrate-ssh-users` (Admin/SuperAdmin only)
+  - **Input**: `VpsNodeId` (el servidor donde estan los usuarios), `PasswordTemplate`, `DaysOverride` (opcional), `ResellerId` (opcional, para asignar dueño)
+  - **Logica**:
+    1. Conectar via SSH al nodo definido por `VpsNodeId`.
+    2. Leer `/etc/passwd` y filtrar usuarios con UID >= 1000.
+    3. Omitir usuarios que ya existan en la base de datos por `UserName`.
+    4. Crear usuarios en DB con:
+       - `PasswordHash`: BCrypt del `PasswordTemplate` (ej: "123456" o "cambiar123").
+       - `ServiceExpiry`: `DateTime.UtcNow.AddDays(DaysOverride)`.
+       - `PlanAccess`: Plan generico "1 mes" si se especifica.
+       - `MaxDevices`: 1 (o configurable).
+       - `AdditionalConnections`: 0.
+       - `ParentId`: `ResellerId` si se especifica.
+       - `IsProvisionedOnVps`: `true` (asumimos que ya existen).
+    5. Retornar lista de creados, omitidos y errores.
+
+**Frontend (AdminPanel/SuperAdminPanel)**
+- [ ] **MIG-2**: Agregar boton "Migrar Usuarios SSH" en la vista de Nodos o AdminPanel.
+  - Modal con inputs: Contraseña por defecto, Dias a agregar, Reseller asignado.
+  - Mostrar resultado de la migracion (exito/fallos).
+
+**General (Edicion Manual)**
+- [ ] **MIG-3**: Permitir edicion manual de `ServiceExpiry`, `MaxDevices` y `AdditionalConnections` para Admins.
+  - **Razon**: Los usuarios migrados tendran fechas "hardcodeadas" segun su contrato actual. El admin necesita ajustar esto sin recargar creditos.
+  - **Cambio**: Extender `PATCH /api/admin/users/{id}/update-basic` para aceptar `int? ServiceExpiryDays`, `int? MaxDevices`, `int? AdditionalConnections`.
+  - **Frontend**: Agregar campos en `EditUserModal` o vista de detalle de usuario (solo para Admin/SuperAdmin).
+
 ### Backend - Bugs y Mejoras Inmediatas
 
 - [ ] **B1**: Eliminar registros duplicados de servicios en Program.cs
 - [ ] **B2**: Unificar DTOs - usar RequestDtos.cs en todos los controllers, eliminar records locales
 - [ ] **B3**: Renombrar `VpsNode.label` a `Label` (requiere migracion)
 - [ ] **B4**: Completar ProvisionNode (agregar EncryptedPassword + OwnerId)
-- [ ] **B5**: Corregir AddCreditsAsync para que SourceUserId sea el admin que carga
+- [x] **B5**: Corregir AddCreditsAsync - SourceUserId es null (creditos generados por sistema)
 - [ ] **B6**: Aplicar EntityConfigurations o eliminar archivos
-- [ ] **B7**: Eliminar JWT key hardcoded de appsettings.json (dejar solo en env var)
+- [x] **B7**: JWT key eliminada de appsettings.json, prioridad a env var
 - [ ] **B8**: Resolver duplicacion de UpdateUser (AdminController vs UserController)
 
 ### Frontend - Bugs y Mejoras Inmediatas
@@ -239,7 +273,7 @@ Ver TESTING.md para plan detallado de testing.
 - [ ] **F3**: Gatear debugApi.js con `import.meta.env.DEV`
 - [ ] **F4**: Eliminar o gatear console.log de interceptors para produccion
 - [ ] **F5**: Reemplazar alert() en Nodes.jsx con message state
-- [ ] **F6**: Eliminar Resellers_backup.jsx
+- [x] **F6**: Eliminar Resellers_backup.jsx
 - [ ] **F7**: Corregir role comparison (numeros vs strings) en Dashboard
 - [ ] **F8**: Unificar estilos de AdminPanel/SuperAdminPanel con CSS custom properties
 - [ ] **F9**: Agregar busqueda de usuario en transferencia de creditos
