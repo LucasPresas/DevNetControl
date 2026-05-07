@@ -6,11 +6,12 @@ const actionTypeLabels = {
   'Login': 'Login Exitoso',
   'Logout': 'Logout',
   'UserCreated': 'Usuario Creado',
+  'UserDeleted': 'Usuario/Reseller Eliminado',
   'UserUpdated': 'Usuario Editado',
   'UserSuspended': 'Usuario Suspendido',
-  'CreditsLoaded': 'Créditos Cargados',
-  'CreditsConsumed': 'Créditos Consumidos',
-  'CreditsTransferred': 'Créditos Transferidos',
+  'CreditsLoaded': 'Creditos Cargados',
+  'CreditsConsumed': 'Creditos Consumidos',
+  'CreditsTransferred': 'Creditos Transferidos',
   'PlanAssigned': 'Plan Asignado',
   'PlanChanged': 'Plan Cambiado',
   'ServiceExtended': 'Servicio Extendido',
@@ -20,7 +21,7 @@ const actionTypeLabels = {
   'NodeAccessRevoked': 'Acceso a Nodo Revocado',
   'PlanAccessGranted': 'Acceso a Plan Otorgado',
   'PlanAccessRevoked': 'Acceso a Plan Revocado',
-  'BulkOperation': 'Operación Masiva',
+  'BulkOperation': 'Operacion Masiva',
 }
 
 export default function Logs() {
@@ -77,28 +78,29 @@ export default function Logs() {
     const actor = activity.actorUserName || 'Sistema'
     let text = actor
     
-    if (activity.actionType === 'Login') text += ' inició sesión'
-    else if (activity.actionType === 'Logout') text += ' cerró sesión'
-    else if (activity.actionType === 'UserCreated') text += ' creó el usuario '
-    else if (activity.actionType === 'UserUpdated') text += ' editó al usuario '
+    if (activity.actionType === 'Login') text += ' inicio sesion'
+    else if (activity.actionType === 'Logout') text += ' cerro sesion'
+    else if (activity.actionType === 'UserCreated') text += ' creo el usuario '
+    else if (activity.actionType === 'UserUpdated') text += ' edito al usuario '
     else if (activity.actionType === 'UserSuspended') {
-      const isActivate = activity.description?.includes('activado')
-      text += isActivate ? ' activó a ' : ' suspendió a '
+      const isActivate = activity.description?.includes('activado') || activity.description?.includes('reactivado')
+      text += isActivate ? ' activo a ' : ' suspendio a '
     }
-    else if (activity.actionType === 'CreditsLoaded') text += ' cargó créditos a '
-    else if (activity.actionType === 'CreditsConsumed') text += ' consumió créditos de '
-    else if (activity.actionType === 'CreditsTransferred') text += ' transfirió créditos a '
-    else if (activity.actionType === 'PlanAssigned') text += ' asignó plan a '
-    else if (activity.actionType === 'PlanChanged') text += ' cambió plan a '
-    else if (activity.actionType === 'ServiceExtended') text += ' extendió servicio a '
-    else if (activity.actionType === 'ResellerCreated') text += ' creó el reseller '
-    else if (activity.actionType === 'SubResellerCreated') text += ' creó el sub-reseller '
-    else if (activity.actionType === 'BulkOperation') text += ' realizó operación masiva: '
-    else text += ' realizó acción'
+    else if (activity.actionType === 'UserDeleted') text += ' elimino '
+    else if (activity.actionType === 'CreditsLoaded') text += ' cargo creditos a '
+    else if (activity.actionType === 'CreditsConsumed') text += ' consumio creditos de '
+    else if (activity.actionType === 'CreditsTransferred') text += ' transfirio creditos a '
+    else if (activity.actionType === 'PlanAssigned') text += ' asigno plan a '
+    else if (activity.actionType === 'PlanChanged') text += ' cambio plan a '
+    else if (activity.actionType === 'ServiceExtended') text += ' extendio servicio a '
+    else if (activity.actionType === 'ResellerCreated') text += ' creo el reseller '
+    else if (activity.actionType === 'SubResellerCreated') text += ' creo el sub-reseller '
+    else if (activity.actionType === 'BulkOperation') text += ' realizo operacion masiva: '
+    else text += ' realizo accion'
 
     if (activity.targetUserName) text += activity.targetUserName
     if (activity.planName) text += ' con el plan ' + activity.planName
-    if (activity.creditsConsumed > 0) text += ', gastó ' + activity.creditsConsumed + ' crédito(s)'
+    if (activity.creditsConsumed > 0) text += ', gasto ' + activity.creditsConsumed + ' credito(s)'
     
     return text
   }

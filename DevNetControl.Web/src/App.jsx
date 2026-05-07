@@ -5,7 +5,6 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Users from './pages/Users'
 import Resellers from './pages/Resellers'
-import Credits from './pages/Credits'
 import Nodes from './pages/Nodes'
 import Plans from './pages/Plans'
 import Logs from './pages/Logs'
@@ -43,7 +42,7 @@ export default function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="users" element={<Users />} />
         <Route path="resellers" element={
-          <ProtectedRoute roles={['Admin', 'SuperAdmin']}>
+          <ProtectedRoute roles={['Admin', 'SuperAdmin', 'Reseller', 'SubReseller']}>
             <Resellers />
           </ProtectedRoute>
         } />
@@ -52,9 +51,16 @@ export default function App() {
             <Plans />
           </ProtectedRoute>
         } />
-        <Route path="credits" element={<Credits />} />
-        <Route path="nodes" element={<Nodes />} />
-        <Route path="nodes/:id" element={<NodeDetail />} />
+        <Route path="nodes" element={
+          <ProtectedRoute roles={['Admin', 'SuperAdmin']}>
+            <Nodes />
+          </ProtectedRoute>
+        } />
+        <Route path="nodes/:id" element={
+          <ProtectedRoute roles={['Admin', 'SuperAdmin']}>
+            <NodeDetail />
+          </ProtectedRoute>
+        } />
         <Route path="logs" element={<Logs />} />
         <Route
           path="admin"

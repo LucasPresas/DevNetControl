@@ -24,6 +24,7 @@ public class UserController : ControllerBase
     private readonly BulkOperationService _bulkService;
     private readonly PlanValidationService _planValidationService;
     private readonly UserOperationService _userOperationService;
+    private readonly SshService _sshService;
 
     public UserController(ApplicationDbContext context, 
                           UserProvisioningService provisioningService,
@@ -32,7 +33,8 @@ public class UserController : ControllerBase
                           ActivityLogService activityLogService,
                           BulkOperationService bulkService,
                           PlanValidationService planValidationService,
-                          UserOperationService userOperationService)
+                          UserOperationService userOperationService,
+                          SshService sshService)
     {
         _context = context;
         _provisioningService = provisioningService;
@@ -42,6 +44,7 @@ public class UserController : ControllerBase
         _bulkService = bulkService;
         _planValidationService = planValidationService;
         _userOperationService = userOperationService;
+        _sshService = sshService;
     }
 
     #region Gestión de Usuarios y VPS
@@ -198,6 +201,7 @@ public class UserController : ControllerBase
     public async Task<IActionResult> GetMySubUsers()
     {
         var parentId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
         var subUsers = await _context.Users
             .Where(u => u.ParentId == parentId && u.Role != UserRole.Reseller && u.Role != UserRole.SubReseller)
             .Include(u => u.Plan)
@@ -211,14 +215,135 @@ public class UserController : ControllerBase
                 Role = u.Role.ToString(),
                 ResellerName = u.Parent != null ? u.Parent.UserName : "N/A",
                 MaxConnections = u.Plan != null ? u.Plan.MaxConnections + u.AdditionalConnections : u.AdditionalConnections,
+                MaxDevices = u.Plan != null ? u.Plan.MaxDevices : 1,
                 PlanName = u.Plan != null ? u.Plan.Name : "Sin Plan",
                 u.IsTrial,
                 u.IsProvisionedOnVps,
                 PlanDurationHours = u.Plan != null ? u.Plan.DurationHours : 0,
-                u.AdditionalConnections
+                u.AdditionalConnections,
+                NodeLabel = u.IsProvisionedOnVps
+                    ? _context.NodeAccesses
+                        .Where(na => na.UserId == u.Id)
+                        .Select(na => na.Node.label)
+                        .FirstOrDefault()
+                    : null
             }).ToListAsync();
 
         return Ok(subUsers);
+    }
+
+    [HttpGet("active-connections")]
+    public async Task<IActionResult> GetActiveConnections()
+    {
+        var parentId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+
+        var provisionedUsers = await _context.Users
+            .Where(u => u.ParentId == parentId && u.IsProvisionedOnVps && u.IsActive)
+            .ToListAsync();
+
+        var nodeAccesses = await _context.NodeAccesses
+            .Include(na => na.Node)
+            .Where(na => provisionedUsers.Select(u => u.Id).Contains(na.UserId))
+            .ToListAsync();
+
+        var userNodeMap = nodeAccesses
+            .GroupBy(na => na.UserId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var activeConnections = new Dictionary<Guid, int>();
+
+        foreach (var user in provisionedUsers)
+        {
+            if (userNodeMap.TryGetValue(user.Id, out var nodeAccess))
+            {
+                try
+                {
+                    var (count, _) = await _sshService.GetActiveSessionsAsync(nodeAccess.NodeId, user.UserName);
+                    activeConnections[user.Id] = count;
+                }
+                catch
+                {
+                    activeConnections[user.Id] = 0;
+                }
+            }
+            else
+            {
+                activeConnections[user.Id] = 0;
+            }
+        }
+
+        return Ok(activeConnections);
+    }
+
+    [HttpGet("dashboard-stats")]
+    public async Task<IActionResult> GetDashboardStats()
+    {
+        var parentId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var now = DateTime.UtcNow;
+        var threeDaysFromNow = now.AddDays(3);
+
+        var allSubUsers = await _context.Users
+            .Where(u => u.ParentId == parentId && u.Role != UserRole.Reseller && u.Role != UserRole.SubReseller)
+            .Include(u => u.Plan)
+            .ToListAsync();
+
+        int totalUsers = allSubUsers.Count;
+        int activeUsers = allSubUsers.Count(u => u.ServiceExpiry.HasValue && u.ServiceExpiry.Value > now);
+        int expiredUsers = allSubUsers.Count(u => u.ServiceExpiry.HasValue && u.ServiceExpiry.Value <= now);
+        int expiringSoonUsers = allSubUsers.Count(u => u.ServiceExpiry.HasValue && u.ServiceExpiry.Value > now && u.ServiceExpiry.Value <= threeDaysFromNow);
+        int trialUsers = allSubUsers.Count(u => u.IsTrial);
+        int totalConnections = allSubUsers.Sum(u => u.Plan != null ? u.Plan.MaxConnections + u.AdditionalConnections : u.AdditionalConnections);
+
+        int resellerCount = 0;
+        if (actorRole == "Admin" || actorRole == "SuperAdmin")
+        {
+            resellerCount = await _context.Users.CountAsync(u => u.TenantId == tenantId && (u.Role == UserRole.Reseller || u.Role == UserRole.SubReseller));
+        }
+        else
+        {
+            resellerCount = await _context.Users.CountAsync(u => u.ParentId == parentId && (u.Role == UserRole.Reseller || u.Role == UserRole.SubReseller));
+        }
+
+        var provisionedUserIds = allSubUsers.Where(u => u.IsProvisionedOnVps && u.IsActive).Select(u => u.Id).ToList();
+        int onlineUsers = 0;
+        if (provisionedUserIds.Count > 0)
+        {
+            var nodeAccesses = await _context.NodeAccesses
+                .Include(na => na.Node)
+                .Where(na => provisionedUserIds.Contains(na.UserId))
+                .ToListAsync();
+
+            var userNodeMap = nodeAccesses
+                .GroupBy(na => na.UserId)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            foreach (var userId in provisionedUserIds)
+            {
+                if (userNodeMap.TryGetValue(userId, out var nodeAccess))
+                {
+                    try
+                    {
+                        var (count, _) = await _sshService.GetActiveSessionsAsync(nodeAccess.NodeId, allSubUsers.First(u => u.Id == userId).UserName);
+                        if (count > 0) onlineUsers++;
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        return Ok(new {
+            totalUsers,
+            activeUsers,
+            expiredUsers,
+            expiringSoonUsers,
+            trialUsers,
+            onlineUsers,
+            resellerCount,
+            totalConnections
+        });
     }
 
     #endregion
@@ -243,7 +368,9 @@ public class UserController : ControllerBase
 
         var creditsBefore = admin.Credits;
 
-        var plans = await _context.Plans.Where(p => request.PlanIds.Contains(p.Id)).ToListAsync();
+        var plans = request.PlanIds != null && request.PlanIds.Count > 0
+            ? await _context.Plans.Where(p => request.PlanIds.Contains(p.Id)).ToListAsync()
+            : new List<Plan>();
         decimal totalCost = plans.Sum(p => p.CreditCost);
 
         if (admin.Credits < totalCost) return BadRequest("Créditos insuficientes para asignar estos planes.");
@@ -319,6 +446,143 @@ public class UserController : ControllerBase
         var result = await _creditService.AddCreditsAsync(id, request.Amount, tenantId, actorUserId, actorRole, actorUserName);
         
         return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpDelete("{id}/sub-reseller")]
+    [Authorize(Policy = "ResellerOrAbove")]
+    public async Task<IActionResult> DeleteSubReseller(Guid id)
+    {
+        var actorUserId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
+
+        if (actorRole == "Admin" || actorRole == "SuperAdmin")
+            return BadRequest("Los admins deben usar el endpoint de eliminacion principal.");
+
+        var subReseller = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId && u.ParentId == actorUserId);
+        if (subReseller == null) return NotFound(new { Message = "Sub-reseller no encontrado o no pertenece al actor." });
+
+        var creditsBefore = (await _context.Users.FindAsync(actorUserId))?.Credits ?? 0m;
+
+        var deletedUserName = subReseller.UserName;
+        var refundCredits = subReseller.Credits;
+
+        // Collect all user IDs being deleted (sub-reseller + children)
+        var childUserIds = _context.Users.Where(u => u.ParentId == id).Select(u => u.Id).ToList();
+        var allDeletedIds = new List<Guid> { id };
+        allDeletedIds.AddRange(childUserIds);
+
+        // Remove child users' related records (ActivityLog restricts on ActorUserId)
+        foreach (var childId in childUserIds)
+        {
+            _context.NodeAccesses.RemoveRange(_context.NodeAccesses.Where(na => na.UserId == childId));
+            _context.PlanAccesses.RemoveRange(_context.PlanAccesses.Where(pa => pa.UserId == childId));
+            _context.ActivityLogs.RemoveRange(_context.ActivityLogs.Where(al => al.ActorUserId == childId || al.TargetUserId == childId));
+            _context.Notifications.RemoveRange(_context.Notifications.Where(n => n.UserId == childId));
+            _context.SessionLogs.RemoveRange(_context.SessionLogs.Where(sl => sl.UserId == childId));
+        }
+        _context.Users.RemoveRange(_context.Users.Where(u => u.ParentId == id));
+
+        // Remove sub-reseller related records (ActivityLog restricts on ActorUserId)
+        _context.NodeAccesses.RemoveRange(_context.NodeAccesses.Where(na => na.UserId == id));
+        _context.PlanAccesses.RemoveRange(_context.PlanAccesses.Where(pa => pa.UserId == id));
+        _context.ActivityLogs.RemoveRange(_context.ActivityLogs.Where(al => al.ActorUserId == id || al.TargetUserId == id));
+        _context.Notifications.RemoveRange(_context.Notifications.Where(n => n.UserId == id));
+        _context.SessionLogs.RemoveRange(_context.SessionLogs.Where(sl => sl.UserId == id));
+
+        _context.Users.Remove(subReseller);
+
+        if (refundCredits > 0)
+        {
+            var actor = await _context.Users.FindAsync(actorUserId);
+            actor.Credits += refundCredits;
+            _context.CreditTransactions.Add(new CreditTransaction {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                SourceUserId = subReseller.Id,
+                SourceBalanceBefore = refundCredits,
+                SourceBalanceAfter = 0,
+                TargetUserId = actorUserId,
+                TargetBalanceBefore = creditsBefore,
+                TargetBalanceAfter = actor.Credits,
+                Amount = refundCredits,
+                Type = CreditTransactionType.Transfer,
+                CreatedAt = DateTime.UtcNow,
+                Note = $"Reembolso por eliminacion de sub-reseller {deletedUserName}"
+            });
+
+            await _activityLogService.LogSubResellerDeletedAsync(
+                actorUserId, subReseller.Id, deletedUserName,
+                tenantId, actorRole, actorUserName,
+                refundCredits, creditsBefore, actor.Credits, childUserIds.Count);
+        }
+        else
+        {
+            await _activityLogService.LogSubResellerDeletedAsync(
+                actorUserId, subReseller.Id, deletedUserName,
+                tenantId, actorRole, actorUserName,
+                0, creditsBefore, creditsBefore, childUserIds.Count);
+        }
+
+        return Ok(new { Message = "Sub-reseller eliminado", RefundedCredits = refundCredits });
+    }
+
+    [HttpPost("{id}/add-credits")]
+    [Authorize(Policy = "ResellerOrAbove")]
+    public async Task<IActionResult> AddCreditsToSubReseller(Guid id, [FromBody] LoadCreditsRequest request)
+    {
+        var actorUserId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
+
+        if (actorRole == "Admin" || actorRole == "SuperAdmin")
+            return BadRequest("Los admins deben usar el endpoint de carga principal.");
+
+        if (request.Amount <= 0) return BadRequest("La cantidad debe ser mayor a 0.");
+
+        var subReseller = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId && u.ParentId == actorUserId);
+        if (subReseller == null) return NotFound(new { Message = "Sub-reseller no encontrado o no pertenece al actor." });
+
+        var actor = await _context.Users.FindAsync(actorUserId);
+        if (actor == null) return NotFound("Usuario actor no encontrado.");
+
+        var creditsBefore = actor.Credits;
+        if (actor.Credits < request.Amount)
+            return BadRequest("Creditos insuficientes.");
+
+        var targetBalanceBefore = subReseller.Credits;
+        actor.Credits -= request.Amount;
+        subReseller.Credits += request.Amount;
+
+        _context.CreditTransactions.Add(new CreditTransaction {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            SourceUserId = actorUserId,
+            SourceBalanceBefore = creditsBefore,
+            SourceBalanceAfter = actor.Credits,
+            TargetUserId = subReseller.Id,
+            TargetBalanceBefore = targetBalanceBefore,
+            TargetBalanceAfter = subReseller.Credits,
+            Amount = request.Amount,
+            Type = CreditTransactionType.Transfer,
+            CreatedAt = DateTime.UtcNow,
+            Note = $"Carga de creditos para sub-reseller {subReseller.UserName}"
+        });
+
+        await _context.SaveChangesAsync();
+
+        await _activityLogService.LogCreditsLoadedAsync(
+            actorUserId, subReseller.Id, subReseller.UserName,
+            tenantId, actorRole, actorUserName,
+            request.Amount, targetBalanceBefore, subReseller.Credits);
+
+        return Ok(new {
+            Message = "Creditos cargados exitosamente",
+            NewBalance = subReseller.Credits,
+            ActorNewBalance = actor.Credits
+        });
     }
 
     #endregion
@@ -467,15 +731,28 @@ public class UserController : ControllerBase
     }
 
     [HttpGet("my-resellers")]
-    [Authorize(Policy = "ResellerOrAbove")]
+    [Authorize(Policy = "SubResellerOrAbove")]
     public async Task<IActionResult> GetMyResellers()
     {
         var parentId = ClaimsHelper.GetCurrentUserId(User);
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
 
-        var resellers = await _context.Users
-            .Where(u => (u.Role == UserRole.Reseller || u.Role == UserRole.SubReseller) &&
-                          (u.ParentId == parentId || u.TenantId == tenantId))
+        IQueryable<User> query;
+
+        if (actorRole == "Admin" || actorRole == "SuperAdmin")
+        {
+            query = _context.Users
+                .Where(u => (u.Role == UserRole.Reseller || u.Role == UserRole.SubReseller) && u.TenantId == tenantId);
+        }
+        else
+        {
+            query = _context.Users
+                .Where(u => (u.Role == UserRole.Reseller || u.Role == UserRole.SubReseller) &&
+                            u.ParentId == parentId && u.TenantId == tenantId);
+        }
+
+        var resellers = await query
             .Select(u => new
             {
                 u.Id,
@@ -491,6 +768,188 @@ public class UserController : ControllerBase
             .ToListAsync();
 
         return Ok(resellers);
+    }
+
+    [HttpPost("create-subreseller")]
+    [Authorize(Policy = "ResellerOrAbove")]
+    [RateLimit("user-create")]
+    public async Task<IActionResult> CreateSubReseller([FromBody] CreateResellerRequest request)
+    {
+        var actorUserId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+        var actorUserName = ClaimsHelper.GetCurrentUserName(User);
+
+        var isSubReseller = request.IsSubReseller;
+        if (actorRole == "Reseller" || actorRole == "SubReseller")
+        {
+            isSubReseller = true;
+        }
+
+        if (await _context.Users.AnyAsync(u => u.UserName == request.UserName && u.TenantId == tenantId))
+            return BadRequest("El usuario ya existe.");
+
+        var actor = await _context.Users.FindAsync(actorUserId);
+        if (actor == null) return NotFound("Usuario no encontrado.");
+
+        var creditsBefore = actor.Credits;
+
+        var plans = request.PlanIds != null && request.PlanIds.Count > 0
+            ? await _context.Plans.Where(p => request.PlanIds.Contains(p.Id)).ToListAsync()
+            : new List<Plan>();
+        decimal totalCost = plans.Sum(p => p.CreditCost);
+
+        if (actorRole != "Admin" && actorRole != "SuperAdmin")
+        {
+            decimal totalRequired = request.InitialCredits;
+            if (actor.Credits < totalRequired)
+                return BadRequest("Creditos insuficientes para crear este reseller.");
+        }
+
+        var planNames = plans.Select(p => p.Name).ToList();
+
+        var reseller = new User {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            UserName = request.UserName,
+            PasswordHash = BC.HashPassword(request.Password),
+            Role = isSubReseller ? UserRole.SubReseller : UserRole.Reseller,
+            ParentId = actorUserId,
+            Credits = request.InitialCredits,
+            IsActive = true
+        };
+
+        _context.Users.Add(reseller);
+
+        if (request.NodeIds != null && request.NodeIds.Count > 0)
+        {
+            foreach (var nodeId in request.NodeIds)
+            {
+                var node = await _context.VpsNodes.FindAsync(nodeId);
+                if (node != null && node.TenantId == tenantId)
+                {
+                    _context.NodeAccesses.Add(new NodeAccess { Id = Guid.NewGuid(), UserId = reseller.Id, NodeId = nodeId });
+                }
+            }
+        }
+
+        if (plans.Count > 0)
+        {
+            foreach (var plan in plans)
+            {
+                _context.PlanAccesses.Add(new PlanAccess { Id = Guid.NewGuid(), UserId = reseller.Id, PlanId = plan.Id });
+            }
+        }
+
+        if (actorRole != "Admin" && actorRole != "SuperAdmin" && request.InitialCredits > 0)
+        {
+            decimal totalDeduction = request.InitialCredits;
+            actor.Credits -= totalDeduction;
+            _context.CreditTransactions.Add(new CreditTransaction {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                SourceUserId = actorUserId,
+                SourceBalanceBefore = creditsBefore,
+                SourceBalanceAfter = actor.Credits,
+                TargetUserId = reseller.Id,
+                TargetBalanceBefore = request.InitialCredits,
+                TargetBalanceAfter = request.InitialCredits,
+                Amount = totalDeduction,
+                Type = CreditTransactionType.UserCreation,
+                CreatedAt = DateTime.UtcNow,
+                Note = $"Creditos iniciales para sub-reseller {reseller.UserName}"
+            });
+        }
+
+        await _context.SaveChangesAsync();
+
+        var creditsAfter = actor.Credits;
+
+        if (isSubReseller)
+        {
+            await _activityLogService.LogSubResellerCreatedAsync(
+                actorUserId, reseller.Id, request.UserName,
+                tenantId, actorRole, actorUserName,
+                creditsBefore, creditsAfter, request.InitialCredits, planNames);
+        }
+        else
+        {
+            await _activityLogService.LogResellerCreatedAsync(
+                actorUserId, reseller.Id, request.UserName,
+                tenantId, actorRole, actorUserName,
+                creditsBefore, creditsAfter, request.InitialCredits, planNames);
+        }
+
+        await _auditService.LogAsync("ResellerCreated",
+            $"Reseller creado: {request.UserName} por {User.Identity?.Name}",
+            actorUserId, tenantId);
+
+        return Ok(new { Message = "Reseller creado", UserId = reseller.Id });
+    }
+
+    [HttpGet("clipboard-data/{id}")]
+    [Authorize]
+    public async Task<IActionResult> GetClipboardData(Guid id)
+    {
+        var actorUserId = ClaimsHelper.GetCurrentUserId(User);
+        var tenantId = ClaimsHelper.GetCurrentTenantId(User);
+        var actorRole = ClaimsHelper.GetCurrentRole(User);
+
+        var user = await _context.Users
+            .Include(u => u.Plan)
+            .FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId);
+
+        if (user == null)
+            return NotFound(new { Message = "Usuario no encontrado" });
+
+        if (actorRole != "Admin" && actorRole != "SuperAdmin" && user.ParentId != actorUserId)
+            return Forbid();
+
+        var nodeAccess = await _context.NodeAccesses
+            .Include(na => na.Node)
+            .Where(na => na.UserId == id)
+            .FirstOrDefaultAsync();
+
+        var nodeLabel = nodeAccess?.Node?.label;
+
+        if (user.Role == UserRole.Customer)
+        {
+            return Ok(new
+            {
+                Type = "customer",
+                UserName = user.UserName,
+                Password = "[La contraseña no es accesible por seguridad]",
+                ServiceExpiry = user.ServiceExpiry?.ToString("dd/MM/yyyy HH:mm") ?? "Sin vencimiento",
+                Node = nodeLabel ?? "Sin asignar",
+                MaxDevices = user.Plan?.MaxDevices ?? 1,
+                MaxConnections = (user.Plan?.MaxConnections ?? 0) + user.AdditionalConnections
+            });
+        }
+
+        if (user.Role == UserRole.Reseller || user.Role == UserRole.SubReseller)
+        {
+            return Ok(new
+            {
+                Type = "reseller",
+                UserName = user.UserName,
+                Password = "[La contraseña no es accesible por seguridad]",
+                Credits = user.Credits,
+                PanelUrl = "[URL del panel]"
+            });
+        }
+
+        if (user.Role == UserRole.Admin)
+        {
+            return Ok(new
+            {
+                Type = "admin",
+                UserName = user.UserName,
+                Password = "[La contraseña no es accesible por seguridad]",
+                PanelUrl = "[URL del panel]"
+            });
+        }
+
+        return BadRequest(new { Message = "Tipo de usuario no soportado" });
     }
 
     [HttpPut("{id}")]
@@ -661,9 +1120,24 @@ public class UserController : ControllerBase
 
         var deletedUserName = user.UserName;
 
+        // Remove child users and their related records
+        var childUserIds = _context.Users.Where(u => u.ParentId == id).Select(u => u.Id).ToList();
+        foreach (var childId in childUserIds)
+        {
+            _context.NodeAccesses.RemoveRange(_context.NodeAccesses.Where(na => na.UserId == childId));
+            _context.PlanAccesses.RemoveRange(_context.PlanAccesses.Where(pa => pa.UserId == childId));
+            _context.ActivityLogs.RemoveRange(_context.ActivityLogs.Where(al => al.ActorUserId == childId || al.TargetUserId == childId));
+            _context.Notifications.RemoveRange(_context.Notifications.Where(n => n.UserId == childId));
+            _context.SessionLogs.RemoveRange(_context.SessionLogs.Where(sl => sl.UserId == childId));
+        }
         _context.Users.RemoveRange(_context.Users.Where(u => u.ParentId == id));
+
+        // Remove user related records
         _context.NodeAccesses.RemoveRange(_context.NodeAccesses.Where(na => na.UserId == id));
         _context.PlanAccesses.RemoveRange(_context.PlanAccesses.Where(pa => pa.UserId == id));
+        _context.ActivityLogs.RemoveRange(_context.ActivityLogs.Where(al => al.ActorUserId == id || al.TargetUserId == id));
+        _context.Notifications.RemoveRange(_context.Notifications.Where(n => n.UserId == id));
+        _context.SessionLogs.RemoveRange(_context.SessionLogs.Where(sl => sl.UserId == id));
 
         _context.Users.Remove(user);
         await _context.SaveChangesAsync();

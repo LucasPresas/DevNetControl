@@ -255,8 +255,7 @@ public class CreateResellerRequestValidator : AbstractValidator<CreateResellerRe
     {
         RuleFor(x => x.UserName).UserNameRules();
         RuleFor(x => x.Password).PasswordRules();
-        RuleFor(x => x.PlanIds).NotEmpty().WithMessage("Debe seleccionar al menos un plan.");
-        RuleFor(x => x.InitialCredits).GreaterThanOrEqualTo(0).WithMessage("Créditos iniciales no pueden ser negativos.");
+        RuleFor(x => x.InitialCredits).GreaterThanOrEqualTo(0).WithMessage("Creditos iniciales no pueden ser negativos.");
     }
 }
 

@@ -3,7 +3,7 @@ import api from '../lib/api'
 import {
   UserPlus, Loader2, Search, Filter, Clock, Server,
   Calendar, Check, X, ChevronLeft, ChevronRight, Users as UsersIcon,
-  Trash2, PlusCircle, AlertTriangle, Pencil
+  Trash2, PlusCircle, AlertTriangle, Pencil, Copy
 } from 'lucide-react'
 import EditUserModal from '../components/modals/EditUserModal'
 import AddConnectionsModal from '../components/modals/AddConnectionsModal'
@@ -32,6 +32,9 @@ export default function Users() {
   const [selectedUser, setSelectedUser] = useState(null)
   const [resellers, setResellers] = useState([])
   const [selectedResellerFilter, setSelectedResellerFilter] = useState('')
+  const [showCopyModal, setShowCopyModal] = useState(false)
+  const [copyData, setCopyData] = useState(null)
+  const [thankMsg, setThankMsg] = useState('Gracias por elegir nuestro servicio.')
 
   useEffect(() => {
     fetchData()
@@ -39,13 +42,18 @@ export default function Users() {
 
   async function fetchData() {
     try {
-      const [usersRes, plansRes, nodesRes, resellersRes] = await Promise.all([
+      const [usersRes, plansRes, nodesRes, resellersRes, connectionsRes] = await Promise.all([
         api.get('/user/my-subusers'),
         api.get('/plan/my-plans'),
         api.get('/nodeaccess/my-nodes'),
         api.get('/user/my-resellers'),
+        api.get('/user/active-connections'),
       ])
-      setUsers(usersRes.data)
+      const users = usersRes.data.map(u => ({
+        ...u,
+        activeConnections: connectionsRes.data[u.id] || 0
+      }))
+      setUsers(users)
       setPlans(plansRes.data)
       setAvailableNodes(nodesRes.data)
       setResellers(resellersRes.data)
@@ -85,6 +93,31 @@ export default function Users() {
 
   function handleModalSuccess() {
     fetchData()
+  }
+
+  async function handleOpenCopyModal(user) {
+    setSelectedUser(user)
+    try {
+      const { data } = await api.get(`/user/clipboard-data/${user.id}`)
+      setCopyData(data)
+      setThankMsg('Gracias por elegir nuestro servicio.')
+      setShowCopyModal(true)
+    } catch (err) {
+      setMessage({ type: 'error', text: 'No se pudieron obtener los datos' })
+    }
+  }
+
+  function buildCopyText() {
+    if (!copyData) return ''
+    return `Usuario: ${copyData.userName}\nPassword: (se envio por separado)\nVencimiento: ${copyData.serviceExpiry}\nServer: ${copyData.node}\n\n${thankMsg}`
+  }
+
+  function handleCopyText() {
+    navigator.clipboard.writeText(buildCopyText()).then(() => {
+      setMessage({ type: 'success', text: 'Datos copiados al portapapeles' })
+      setShowCopyModal(false)
+      setTimeout(() => setMessage(null), 3000)
+    })
   }
 
   async function handleSubmit(e) {
@@ -450,12 +483,10 @@ export default function Users() {
                   </th>
                   <th>Usuario</th>
                   <th>Plan / Duracion</th>
-                  <th>Disp</th>
                   <th>Conexiones</th>
                   <th>Reseller</th>
                   <th>Vencimiento</th>
                   <th>Estado</th>
-                  <th>Creditos</th>
                   <th>Acciones</th>
                 </tr>
             </thead>
@@ -496,10 +527,13 @@ export default function Users() {
                       {u.isTrialPlan && <span className="badge badge-warning mt-0.5">Prueba</span>}
                     </div>
                   </td>
-                  <td className="text-center text-[var(--text-secondary)]">{u.maxDevices || 1}</td>
-                  <td className="text-center text-[var(--text-secondary)]">
-                    {((u.plan?.maxConnections || 0) + (u.additionalConnections || 0))}
-                    <span className="text-xs text-[var(--text-muted)]"> ({(u.additionalConnections || 0)} extra)</span>
+                  <td className="text-center">
+                    <span className="font-medium text-[var(--text-primary)]">
+                      {u.activeConnections ?? 0}/{u.maxConnections || 0}
+                    </span>
+                    {u.nodeLabel && (
+                      <span className="text-xs text-[var(--text-muted)] block">{u.nodeLabel}</span>
+                    )}
                   </td>
                   <td className="text-sm text-[var(--text-secondary)]">{u.resellerName || 'N/A'}</td>
                   <td>
@@ -516,9 +550,11 @@ export default function Users() {
                         : <span className="badge badge-success">Activo</span>
                     }
                   </td>
-                  <td className="font-semibold text-[var(--text-primary)]">{u.credits?.toLocaleString() ?? 0}</td>
                   <td>
                     <div className="flex items-center gap-1">
+                      <button onClick={() => handleOpenCopyModal(u)} className="btn btn-sm btn-secondary" title="Copiar datos">
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
                       <button onClick={() => openEditModal(u)} className="btn btn-sm btn-secondary" title="Editar usuario">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
@@ -560,6 +596,48 @@ export default function Users() {
         user={selectedUser}
         onSuccess={handleModalSuccess}
       />
+
+      {/* Copy Modal */}
+      {showCopyModal && copyData && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="card p-6 max-w-md w-full">
+            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Copiar Datos</h3>
+            <div className="space-y-3 mb-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-[var(--text-secondary)]">Usuario:</span>
+                <span className="font-medium text-[var(--text-primary)]">{copyData.userName}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-[var(--text-secondary)]">Vencimiento:</span>
+                <span className="font-medium text-[var(--text-primary)]">{copyData.serviceExpiry}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-[var(--text-secondary)]">Server:</span>
+                <span className="font-medium text-[var(--text-primary)]">{copyData.node}</span>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Mensaje de agradecimiento</label>
+                <textarea
+                  value={thankMsg}
+                  onChange={(e) => setThankMsg(e.target.value)}
+                  className="input w-full"
+                  rows={2}
+                />
+              </div>
+              <div className="mt-2 p-2 bg-[var(--bg-primary)] rounded text-xs font-mono text-[var(--text-secondary)] whitespace-pre-wrap">
+                {buildCopyText()}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleCopyText} className="btn btn-primary flex-1">
+                <Copy className="w-4 h-4" />
+                Copiar
+              </button>
+              <button onClick={() => { setShowCopyModal(false); setCopyData(null) }} className="btn btn-secondary">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

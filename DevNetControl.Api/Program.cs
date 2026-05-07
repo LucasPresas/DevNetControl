@@ -58,14 +58,8 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-builder.Services.AddHttpContextAccessor(); // Para AuditService
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<TokenService>();
-builder.Services.AddScoped<CreditService>();
-builder.Services.AddScoped<EncryptionService>();
-builder.Services.AddScoped<SshService>();
-builder.Services.AddScoped<SshUserManager>();
-builder.Services.AddScoped<SshSanitizerService>();
-builder.Services.AddScoped<UserProvisioningService>();
 builder.Services.AddScoped<CreditService>();
 builder.Services.AddScoped<EncryptionService>();
 builder.Services.AddScoped<SshService>();

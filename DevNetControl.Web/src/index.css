@@ -18,6 +18,30 @@
   --danger: #ef4444;
 }
 
+[data-theme="light"] {
+  --bg-primary: #FDF9F3;
+  --bg-secondary: #F5F1E9;
+  --bg-card: #F5F1E9;
+  --bg-hover: #FBF7EE;
+  --border-color: #E1DBD0;
+  --text-primary: #4D4D4D;
+  --text-secondary: #7F7F7F;
+  --text-muted: #9A9A9A;
+  --accent: #4B9B7B;
+  --accent-hover: #3D7F64;
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --card-shadow: 0 2px 4px rgba(77, 77, 77, 0.05);
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--card-shadow, none);
+}
+
 * {
   -webkit-tap-highlight-color: transparent;
   margin: 0;
@@ -111,12 +135,6 @@ input, select, textarea, button {
   background: rgba(59, 130, 246, 0.15);
   color: var(--accent);
   border: 1px solid rgba(59, 130, 246, 0.3);
-}
-
-.card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
 }
 
 .btn {

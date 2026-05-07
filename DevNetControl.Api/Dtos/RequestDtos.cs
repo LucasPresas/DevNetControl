@@ -55,7 +55,7 @@ public record SessionLogDto(Guid Id, Guid? UserId, string UserName, string Clien
 
 // Hierarchy & Resellers
 public record HierarchyNodeDto(Guid Id, string UserName, DevNetControl.Api.Domain.UserRole Role, decimal Credits, List<HierarchyNodeDto> Children);
-public record CreateResellerRequest(string UserName, string Password, List<Guid> PlanIds, bool IsSubReseller = false, decimal InitialCredits = 0);
+public record CreateResellerRequest(string UserName, string Password, List<Guid>? PlanIds, bool IsSubReseller = false, decimal InitialCredits = 0, List<Guid>? NodeIds = null);
 public record LoadCreditsRequest(decimal Amount);
 
   // Bulk Operations

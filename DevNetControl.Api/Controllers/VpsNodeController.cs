@@ -255,18 +255,78 @@ public class VpsNodeController : ControllerBase
         var tenantId = ClaimsHelper.GetCurrentTenantId(User);
         var nodes = await _context.VpsNodes
             .Where(n => n.TenantId == tenantId || n.TenantId == Guid.Empty)
-            .Select(n => new
-            {
-                n.Id,
-                n.IP,
-                Label = n.label,
-                n.IsOnline,
-                n.LastHealthCheck,
-                n.LatencyMs
-            })
             .ToListAsync();
 
-        return Ok(nodes);
+        var nodeUserCounts = await _context.NodeAccesses
+            .Where(na => nodes.Select(n => n.Id).Contains(na.NodeId))
+            .GroupBy(na => na.NodeId)
+            .Select(g => new { NodeId = g.Key, UserCount = g.Count() })
+            .ToListAsync();
+
+        var userCountMap = nodeUserCounts.ToDictionary(x => x.NodeId, x => x.UserCount);
+
+        var result = new List<object>();
+        foreach (var node in nodes)
+        {
+            int userCount = userCountMap.GetValueOrDefault(node.Id, 0);
+            object metrics = null;
+
+            if (node.IsOnline)
+            {
+                try
+                {
+                    var metricsResult = await _sshService.GetSystemMetricsAsync(node.Id);
+                    if (metricsResult.Success)
+                    {
+                        var parsed = ParseMetrics(metricsResult.Output);
+                        metrics = new
+                        {
+                            CpuPercent = ParseMetricPercent(parsed, "CPU"),
+                            RamPercent = ParseMetricPercent(parsed, "Mem"),
+                            DiskPercent = ParseMetricPercent(parsed, "Disk"),
+                            RamUsed = ParseMetricValue(parsed, "Mem", "MB"),
+                            RamTotal = ParseMetricTotal(parsed, "Mem", "MB")
+                        };
+                    }
+                }
+                catch { }
+            }
+
+            result.Add(new
+            {
+                node.Id,
+                node.IP,
+                Label = node.label,
+                node.IsOnline,
+                node.LastHealthCheck,
+                node.LatencyMs,
+                UserCount = userCount,
+                Metrics = metrics
+            });
+        }
+
+        return Ok(result);
+    }
+
+    private static int ParseMetricPercent(Dictionary<string, string> metrics, string key)
+    {
+        if (!metrics.TryGetValue(key, out var value)) return 0;
+        var percentMatch = System.Text.RegularExpressions.Regex.Match(value, @"(\d+)%");
+        return percentMatch.Success ? int.Parse(percentMatch.Groups[1].Value) : 0;
+    }
+
+    private static int ParseMetricValue(Dictionary<string, string> metrics, string key, string unit)
+    {
+        if (!metrics.TryGetValue(key, out var value)) return 0;
+        var match = System.Text.RegularExpressions.Regex.Match(value, @"(\d+)\s*" + unit);
+        return match.Success ? int.Parse(match.Groups[1].Value) : 0;
+    }
+
+    private static int ParseMetricTotal(Dictionary<string, string> metrics, string key, string unit)
+    {
+        if (!metrics.TryGetValue(key, out var value)) return 0;
+        var match = System.Text.RegularExpressions.Regex.Match(value, @"(\d+)/(\d+)\s*" + unit);
+        return match.Success && match.Groups.Count > 2 ? int.Parse(match.Groups[2].Value) : 0;
     }
 
     /// <summary>

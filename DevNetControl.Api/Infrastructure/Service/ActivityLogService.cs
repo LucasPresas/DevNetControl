@@ -228,6 +228,38 @@ public class ActivityLogService
         await _context.SaveChangesAsync();
     }
 
+    public async Task LogSubResellerDeletedAsync(
+        Guid actorUserId, Guid targetUserId, string targetUserName,
+        Guid tenantId, string actorRole, string actorUserName,
+        decimal refundedCredits, decimal actorCreditsBefore, decimal actorCreditsAfter,
+        int deletedChildCount)
+    {
+        var log = new ActivityLog
+        {
+            ActionType = ActivityActionType.UserDeleted,
+            ActorUserId = actorUserId,
+            ActorUserName = actorUserName,
+            ActorRole = actorRole,
+            TargetUserId = targetUserId,
+            TargetUserName = targetUserName,
+            CreditsConsumed = 0,
+            CreditsBalanceBefore = actorCreditsBefore,
+            CreditsBalanceAfter = actorCreditsAfter,
+            TenantId = tenantId,
+            Description = $"Sub-reseller '{targetUserName}' eliminado. Reembolso: {refundedCredits} creditos. Hijos eliminados: {deletedChildCount}. Saldo: {actorCreditsBefore} -> {actorCreditsAfter}",
+            Details = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                RefundedCredits = refundedCredits,
+                DeletedChildCount = deletedChildCount,
+                ActorBalanceBefore = actorCreditsBefore,
+                ActorBalanceAfter = actorCreditsAfter
+            })
+        };
+
+        _context.ActivityLogs.Add(log);
+        await _context.SaveChangesAsync();
+    }
+
     public async Task LogUserSuspendedAsync(
         Guid actorUserId, Guid targetUserId, string targetUserName,
         Guid tenantId, string actorRole, string actorUserName, bool isSuspended)

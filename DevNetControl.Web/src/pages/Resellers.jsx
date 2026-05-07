@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from 'react'
 import api from '../lib/api'
+import { useAuthStore } from '../store/authStore'
 import {
   UserPlus, Loader2, Search, Check, X, Users as UsersIcon,
   Trash2, Edit3, CreditCard, FileText, Copy, Shield, ShieldOff, Server,
@@ -8,12 +9,15 @@ import {
 import { bulkDeleteResellers, bulkToggleSuspendResellers } from '../lib/api'
 
 export default function Resellers() {
+  const { user } = useAuthStore()
+  const isAdmin = user?.role === 'Admin' || user?.role === 'SuperAdmin'
+
   const [resellers, setResellers] = useState([])
   const [plans, setPlans] = useState([])
   const [availableNodes, setAvailableNodes] = useState([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ userName: '', password: '', isSubReseller: false, planIds: [], initialCredits: 0, nodeIds: [] })
+  const [form, setForm] = useState({ userName: '', password: '', isSubReseller: !isAdmin, planIds: [], initialCredits: 0, nodeIds: [] })
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState(null)
   const [search, setSearch] = useState('')
@@ -30,6 +34,10 @@ export default function Resellers() {
   const [actionLoading, setActionLoading] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
   const [page, setPage] = useState(1)
+  const [showCopyModal, setShowCopyModal] = useState(false)
+  const [copyData, setCopyData] = useState(null)
+  const [panelUrl, setPanelUrl] = useState('https://devnetcontrol.com')
+  const [thankMsg, setThankMsg] = useState('Gracias por elegir nuestro servicio.')
   const pageSize = 10
 
   useEffect(() => {
@@ -58,17 +66,20 @@ export default function Resellers() {
     setSubmitting(true)
     setMessage(null)
 
+    const endpoint = isAdmin ? '/user/create-reseller' : '/user/create-subreseller'
+    const payload = {
+      userName: form.userName,
+      password: form.password,
+      isSubReseller: !isAdmin ? true : form.isSubReseller,
+      planIds: form.planIds.length > 0 ? form.planIds : null,
+      initialCredits: parseFloat(form.initialCredits) || 0,
+      nodeIds: form.nodeIds.length > 0 ? form.nodeIds : null,
+    }
+
     try {
-      const { data } = await api.post('/user/create-reseller', {
-        userName: form.userName,
-        password: form.password,
-        isSubReseller: form.isSubReseller,
-        planIds: form.planIds.length > 0 ? form.planIds : null,
-        initialCredits: parseFloat(form.initialCredits) || 0,
-        nodeIds: form.nodeIds.length > 0 ? form.nodeIds : null,
-      })
+      const { data } = await api.post(endpoint, payload)
       setMessage({ type: 'success', text: data.message })
-      setForm({ userName: '', password: '', isSubReseller: false, planIds: [], initialCredits: 0, nodeIds: [] })
+      setForm({ userName: '', password: '', isSubReseller: !isAdmin, planIds: [], initialCredits: 0, nodeIds: [] })
       setShowCreate(false)
       fetchData()
     } catch (err) {
@@ -95,8 +106,9 @@ export default function Resellers() {
     if (!confirm(`Eliminar reseller "${userName}" y todos sus usuarios? Esta accion no se puede deshacer.`)) return
     setActionLoading(true)
     try {
-      const { data } = await api.delete(`/user/${id}`)
-      setMessage({ type: 'success', text: data.message })
+      const endpoint = isAdmin ? `/user/${id}` : `/user/${id}/sub-reseller`
+      const { data } = await api.delete(endpoint)
+      setMessage({ type: 'success', text: data.message + (data.refundedCredits ? ` (Reembolso: ${data.refundedCredits} creditos)` : '') })
       fetchData()
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Error al eliminar' })
@@ -108,7 +120,8 @@ export default function Resellers() {
   async function handleLoadCredits() {
     setActionLoading(true)
     try {
-      const { data } = await api.post(`/user/${selectedReseller.id}/load-credits`, { amount: parseFloat(creditAmount) })
+      const endpoint = isAdmin ? `/user/${selectedReseller.id}/load-credits` : `/user/${selectedReseller.id}/add-credits`
+      const { data } = await api.post(endpoint, { amount: parseFloat(creditAmount) })
       setMessage({ type: 'success', text: data.message })
       setShowCreditsModal(false)
       setSelectedReseller(null)
@@ -176,40 +189,60 @@ export default function Resellers() {
     }
   }
 
+  async function handleOpenCopyModal(reseller) {
+    setSelectedReseller(reseller)
+    try {
+      const { data } = await api.get(`/user/clipboard-data/${reseller.id}`)
+      setCopyData(data)
+      setThankMsg(data.type === 'customer' ? 'Gracias por elegir nuestro servicio.' : '')
+      setShowCopyModal(true)
+    } catch (err) {
+      setMessage({ type: 'error', text: 'No se pudieron obtener los datos' })
+    }
+  }
+
+  function buildCopyText() {
+    if (!copyData || !selectedReseller) return ''
+    const d = copyData
+
+    if (d.type === 'customer') {
+      return `Usuario: ${d.userName}\nPassword: (se envio por separado)\nVencimiento: ${d.serviceExpiry}\nServer: ${d.node}\n\n${thankMsg}`
+    }
+
+    if (d.type === 'reseller') {
+      return `Reseller - DevNetControl\n\nUsuario: ${d.userName}\nPassword: (se envio por separado)\nCreditos: ${d.credits?.toLocaleString() ?? 0}\nPanel: ${panelUrl}`
+    }
+
+    if (d.type === 'admin') {
+      return `Admin - DevNetControl\n\nUsuario: ${d.userName}\nPassword: (se envio por separado)\nPanel: ${panelUrl}`
+    }
+
+    return ''
+  }
+
+  function handleCopyText() {
+    const text = buildCopyText()
+    navigator.clipboard.writeText(text).then(() => {
+      setMessage({ type: 'success', text: 'Datos copiados al portapapeles' })
+      setShowCopyModal(false)
+      setTimeout(() => setMessage(null), 3000)
+    })
+  }
+
   async function handleBulkDelete() {
-    console.group('🗑️ Resellers.handleBulkDelete INICIADO')
-    console.log('📊 selectedIds:', selectedIds)
-    
-    if (selectedIds.length === 0) {
-      console.warn('⚠️ No hay resellers seleccionados')
-      console.groupEnd()
-      return
-    }
-    
-    const confirmDelete = confirm(`Eliminar ${selectedIds.length} resellers? Esta accion no se puede deshacer.`)
-    console.log('✓ Confirmación del usuario:', confirmDelete)
-    
-    if (!confirmDelete) {
-      console.log('❌ Usuario canceló la operación')
-      console.groupEnd()
-      return
-    }
-    
+    if (selectedIds.length === 0) return
+    if (!confirm(`Eliminar ${selectedIds.length} resellers? Esta accion no se puede deshacer.`)) return
     setActionLoading(true)
     setMessage(null)
     try {
-      console.log('🔄 Enviando petición DELETE bulk...')
       const { data } = await bulkDeleteResellers(selectedIds)
-      console.log('✅ Respuesta exitosa:', data)
       setMessage({ type: 'success', text: data.message })
       setSelectedIds([])
       fetchData()
     } catch (err) {
-      console.error('❌ Error en handleBulkDelete:', err)
       setMessage({ type: 'error', text: err.response?.data?.message || 'Error al eliminar' })
     } finally {
       setActionLoading(false)
-      console.groupEnd()
     }
   }
 
@@ -227,19 +260,6 @@ export default function Resellers() {
     } finally {
       setActionLoading(false)
     }
-  }
-
-  function copyToClipboard(reseller) {
-    const nodes = (reseller.nodes || []).join(', ') || 'Sin nodos'
-    const duration = reseller.durationHours
-      ? reseller.durationHours >= 24 && reseller.durationHours % 24 === 0
-        ? `${reseller.durationHours / 24} dias`
-        : `${reseller.durationHours} horas`
-      : '-'
-    const text = `*DevNetControl - Datos de acceso*\n\nUsuario: ${reseller.userName}\nPassword: (se envio por separado)\nPlan: ${reseller.planName || 'Sin plan'}\nDuracion: ${duration}\nCreditos: ${reseller.credits?.toLocaleString() ?? 0}\nNodos: ${nodes}`
-    navigator.clipboard.writeText(text)
-    setMessage({ type: 'success', text: 'Datos copiados al portapapeles' })
-    setTimeout(() => setMessage(null), 3000)
   }
 
   function toggleNodeId(id) {
@@ -340,13 +360,15 @@ export default function Resellers() {
               <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Password</label>
               <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="input" placeholder="Minimo 6 caracteres" required />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Tipo</label>
-              <select value={form.isSubReseller ? 'sub' : 'reseller'} onChange={(e) => setForm({ ...form, isSubReseller: e.target.value === 'sub' })} className="input">
-                <option value="reseller">Reseller</option>
-                <option value="sub">Sub-Reseller</option>
-              </select>
-            </div>
+            {isAdmin && (
+              <div>
+                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Tipo</label>
+                <select value={form.isSubReseller ? 'sub' : 'reseller'} onChange={(e) => setForm({ ...form, isSubReseller: e.target.value === 'sub' })} className="input">
+                  <option value="reseller">Reseller</option>
+                  <option value="sub">Sub-Reseller</option>
+                </select>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Creditos iniciales</label>
               <input type="number" value={form.initialCredits} onChange={(e) => setForm({ ...form, initialCredits: e.target.value })} className="input" min="0" step="0.01" />
@@ -532,7 +554,7 @@ export default function Resellers() {
                   </td>
                   <td>
                     <div className="flex items-center gap-1 flex-wrap">
-                      <button onClick={() => copyToClipboard(r)} title="Copiar datos" className="p-1.5 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-blue-400 transition-colors">
+                      <button onClick={() => handleOpenCopyModal(r)} title="Copiar datos" className="p-1.5 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-blue-400 transition-colors">
                         <Copy className="w-3.5 h-3.5" />
                       </button>
                       <button onClick={() => openEditModal(r)} title="Editar" className="p-1.5 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-green-400 transition-colors">
@@ -541,12 +563,16 @@ export default function Resellers() {
                       <button onClick={() => openCreditsModal(r)} title="Cargar creditos" className="p-1.5 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-yellow-400 transition-colors">
                         <CreditCard className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => openPlansModal(r)} title="Gestionar planes" className="p-1.5 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-purple-400 transition-colors">
-                        <FileText className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => openNodesModal(r)} title="Gestionar nodos" className="p-1.5 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-cyan-400 transition-colors">
-                        <Server className="w-3.5 h-3.5" />
-                      </button>
+                      {isAdmin && (
+                        <>
+                          <button onClick={() => openPlansModal(r)} title="Gestionar planes" className="p-1.5 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-purple-400 transition-colors">
+                            <FileText className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => openNodesModal(r)} title="Gestionar nodos" className="p-1.5 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-cyan-400 transition-colors">
+                            <Server className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
                       <button onClick={() => handleToggleSuspend(r.id)} disabled={actionLoading} title={r.isActive ? 'Suspender' : 'Activar'} className="p-1.5 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-orange-400 transition-colors">
                         {r.isActive ? <ShieldOff className="w-3.5 h-3.5" /> : <Shield className="w-3.5 h-3.5" />}
                       </button>
@@ -580,6 +606,80 @@ export default function Resellers() {
             <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="btn btn-secondary btn-sm">
               <ChevronRight className="w-4 h-4" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Copy Modal */}
+      {showCopyModal && copyData && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="card p-6 max-w-md w-full">
+            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Copiar Datos</h3>
+            <div className="space-y-3 mb-4">
+              {copyData.type === 'customer' && (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-secondary)]">Usuario:</span>
+                    <span className="font-medium text-[var(--text-primary)]">{copyData.userName}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-secondary)]">Vencimiento:</span>
+                    <span className="font-medium text-[var(--text-primary)]">{copyData.serviceExpiry}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-secondary)]">Server:</span>
+                    <span className="font-medium text-[var(--text-primary)]">{copyData.node}</span>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Mensaje de agradecimiento</label>
+                    <textarea
+                      value={thankMsg}
+                      onChange={(e) => setThankMsg(e.target.value)}
+                      className="input w-full"
+                      rows={2}
+                    />
+                  </div>
+                </>
+              )}
+              {copyData.type === 'reseller' && (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-secondary)]">Usuario:</span>
+                    <span className="font-medium text-[var(--text-primary)]">{copyData.userName}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-secondary)]">Creditos:</span>
+                    <span className="font-medium text-yellow-400">{copyData.credits?.toLocaleString() ?? 0}</span>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">URL del panel</label>
+                    <input type="text" value={panelUrl} onChange={(e) => setPanelUrl(e.target.value)} className="input" />
+                  </div>
+                </>
+              )}
+              {copyData.type === 'admin' && (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-secondary)]">Usuario:</span>
+                    <span className="font-medium text-[var(--text-primary)]">{copyData.userName}</span>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">URL del panel</label>
+                    <input type="text" value={panelUrl} onChange={(e) => setPanelUrl(e.target.value)} className="input" />
+                  </div>
+                </>
+              )}
+              <div className="mt-2 p-2 bg-[var(--bg-primary)] rounded text-xs font-mono text-[var(--text-secondary)] whitespace-pre-wrap">
+                {buildCopyText()}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleCopyText} className="btn btn-primary flex-1">
+                <Copy className="w-4 h-4" />
+                Copiar
+              </button>
+              <button onClick={() => { setShowCopyModal(false); setCopyData(null) }} className="btn btn-secondary">Cancelar</button>
+            </div>
           </div>
         </div>
       )}

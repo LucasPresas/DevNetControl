@@ -3,11 +3,12 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import api from '../lib/api'
 import {
-  LayoutDashboard, Users, CreditCard, Server, Shield, LogOut, Menu, X,
-  ChevronDown, ChevronRight, FileText, Settings, Wallet, UserCheck
+  LayoutDashboard, Users, Server, Shield, LogOut, Menu, X,
+  ChevronDown, ChevronRight, FileText, Settings, Wallet, UserCheck,
+  Sun, Moon
 } from 'lucide-react'
 
-const navSections = [
+const adminNavSections = [
   {
     label: 'Dashboard',
     items: [
@@ -23,9 +24,29 @@ const navSections = [
     ]
   },
   {
-    label: 'Finanzas',
+    label: 'Sistema',
     items: [
-      { to: '/credits', icon: CreditCard, label: 'Creditos' },
+      { to: '/logs', icon: FileText, label: 'Logs' },
+    ]
+  },
+]
+
+const resellerNavSections = [
+  {
+    label: 'Dashboard',
+    items: [
+      { to: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
+    ]
+  },
+  {
+    label: 'Gestion',
+    items: [
+      { to: '/users', icon: Users, label: 'Usuarios' },
+    ]
+  },
+  {
+    label: 'Sistema',
+    items: [
       { to: '/logs', icon: FileText, label: 'Logs' },
     ]
   },
@@ -45,6 +66,15 @@ export default function Layout() {
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [collapsedSections, setCollapsedSections] = useState({})
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('theme')
+    return saved ? saved === 'dark' : true
+  })
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+    localStorage.setItem('theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
 
   useEffect(() => {
     async function fetchCredits() {
@@ -60,6 +90,8 @@ export default function Layout() {
 
   const isSuperAdmin = user?.role === 'SuperAdmin'
   const isAdmin = user?.role === 'Admin' || isSuperAdmin
+  const isReseller = user?.role === 'Reseller' || user?.role === 'SubReseller'
+  const navSections = isAdmin ? adminNavSections : resellerNavSections
 
   const toggleSection = (section) => {
     setCollapsedSections(prev => ({ ...prev, [section]: !prev[section] }))
@@ -138,7 +170,7 @@ export default function Layout() {
             </div>
           ))}
 
-          {isAdmin && (
+          {(isAdmin || isReseller) && (
             <div className="mt-2 pt-2 border-t border-[var(--border-color)]">
               <div className="px-2 py-1.5 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
                 Resellers
@@ -225,6 +257,13 @@ export default function Layout() {
           <div className="flex-1" />
 
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-2 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] transition-colors"
+              title={darkMode ? 'Modo claro' : 'Modo oscuro'}
+            >
+              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
             {user?.credits !== undefined && (
               <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-md">
                 <Wallet className="w-4 h-4 text-yellow-500" />
